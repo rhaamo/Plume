@@ -27,7 +27,6 @@
             <p><a href="@uri!(user::details: name = admin.get_fqn(ctx.0))">@admin.name(ctx.0)</a><small>@@@admin.get_fqn(ctx.0)</small></p>
         </div>
         </section>
-        <p>@i18n!(ctx.1, "Runs Plume {0}"; env!("CARGO_PKG_VERSION"))</p>
     </div>
     <section>
       @Html(instance.long_description_html)
