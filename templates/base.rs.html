@@ -71,7 +71,7 @@
         <footer>
             <span>@concat!("Plume ", env!("CARGO_PKG_VERSION"))</span>
             <a href="@uri!(instance::about)">@i18n!(ctx.1, "About this instance")</a>
-            <a href="https://github.com/Plume-org/Plume">@i18n!(ctx.1, "Source code")</a>
+            <a href="https://github.com/rhaamo/Plume/tree/dashie">@i18n!(ctx.1, "Source code")</a>
             <a href="https://riot.im/app/#/room/#plume:disroot.org">@i18n!(ctx.1, "Matrix room")</a>
             @if ctx.2.clone().map(|a| a.is_admin).unwrap_or(false) {
                 <a href="@uri!(instance::admin)">@i18n!(ctx.1, "Administration")</a>
