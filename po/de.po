@@ -677,6 +677,91 @@ msgstr "Falls es dies nicht gibt, lass es leer"
 msgid "All rights reserved."
 msgstr ""
 
+msgid "Search"
+msgstr ""
+
+#, fuzzy
+msgid "Your query"
+msgstr "Dein Feed"
+
+msgid "Advanced search"
+msgstr ""
+
+msgid "Article title matching these words"
+msgstr ""
+
+msgid "Subtitle matching these words"
+msgstr ""
+
+msgid "Content matching these words"
+msgstr ""
+
+msgid "From this date"
+msgstr ""
+
+msgid "To this date"
+msgstr ""
+
+msgid "Containing these tags"
+msgstr ""
+
+msgid "Posted on one of these instances"
+msgstr ""
+
+msgid "Posted by one of these authors"
+msgstr ""
+
+msgid "Posted on one of these blogs"
+msgstr ""
+
+#, fuzzy
+msgid "Written in this language"
+msgstr "Wir konnten diese Seite nicht finden."
+
+#, fuzzy
+msgid "Published under this license"
+msgstr "Dieser Artikel steht unter der {0} Lizenz."
+
+msgid "Search result for \"{0}\""
+msgstr ""
+
+msgid "Search result"
+msgstr ""
+
+#, fuzzy
+msgid "No result for your query"
+msgstr "Zu deiner Gallerie"
+
+msgid "No more result for your query"
+msgstr ""
+
+msgid "Subtitle — byline"
+msgstr ""
+
+#, fuzzy
+msgid "Body content"
+msgstr "Inhalt"
+
+msgid "Tags"
+msgstr ""
+
+#, fuzzy
+msgid "Instance domain"
+msgstr "Instanz-Einstellungen"
+
+msgid "Authors"
+msgstr ""
+
+msgid "Blog title"
+msgstr ""
+
+msgid "Language"
+msgstr ""
+
+#, fuzzy
+msgid "Article license"
+msgstr "Voreingestellte Lizenz"
+
 #~ msgid "Create blog"
 #~ msgstr "Blog erstellen"
 
@@ -692,37 +777,3 @@ msgstr ""
 
 #~ msgid "You are not authorized."
 #~ msgstr "Nicht berechtigt."
-
-#~ msgid "Passwords are not matching"
-#~ msgstr "Passwörter stimmen nicht überein"
-
-#~ msgid "One author in this blog: "
-#~ msgid_plural "{0} authors in this blog: "
-#~ msgstr[0] "Ein Autor in diesem Blog: "
-#~ msgstr[1] "{0} Autoren in diesem Blog: "
-
-#~ msgid "One article in this blog"
-#~ msgid_plural "{0} articles in this blog"
-#~ msgstr[0] "Ein Artikel in diesem Blog"
-#~ msgstr[1] "{0} Artikel in diesem Blog"
-
-#~ msgid "Your feed"
-#~ msgstr "Dein Feed"
-
-#~ msgid "Home to"
-#~ msgstr "Heimat von"
-
-#~ msgid "people"
-#~ msgstr "Menschen"
-
-#~ msgid "Who wrote"
-#~ msgstr "Wer schrieb"
-
-#~ msgid "articles"
-#~ msgstr "Artikel"
-
-#~ msgid "And connected to"
-#~ msgstr "Und verbunden mit"
-
-#~ msgid "other instances"
-#~ msgstr "anderen Instanzen"

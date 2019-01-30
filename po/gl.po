@@ -666,6 +666,91 @@ msgstr "Deixar baldeiro si non hai ningunha"
 msgid "All rights reserved."
 msgstr ""
 
+msgid "Search"
+msgstr ""
+
+#, fuzzy
+msgid "Your query"
+msgstr "Para vostede"
+
+msgid "Advanced search"
+msgstr ""
+
+msgid "Article title matching these words"
+msgstr ""
+
+msgid "Subtitle matching these words"
+msgstr ""
+
+msgid "Content matching these words"
+msgstr ""
+
+msgid "From this date"
+msgstr ""
+
+msgid "To this date"
+msgstr ""
+
+msgid "Containing these tags"
+msgstr ""
+
+msgid "Posted on one of these instances"
+msgstr ""
+
+msgid "Posted by one of these authors"
+msgstr ""
+
+msgid "Posted on one of these blogs"
+msgstr ""
+
+#, fuzzy
+msgid "Written in this language"
+msgstr "Non atopamos esta páxina"
+
+#, fuzzy
+msgid "Published under this license"
+msgstr "Este artigo ten licenza {0}"
+
+msgid "Search result for \"{0}\""
+msgstr ""
+
+msgid "Search result"
+msgstr ""
+
+#, fuzzy
+msgid "No result for your query"
+msgstr "Ir a súa galería"
+
+msgid "No more result for your query"
+msgstr ""
+
+msgid "Subtitle — byline"
+msgstr ""
+
+#, fuzzy
+msgid "Body content"
+msgstr "Contido"
+
+msgid "Tags"
+msgstr ""
+
+#, fuzzy
+msgid "Instance domain"
+msgstr "Axustes da instancia"
+
+msgid "Authors"
+msgstr ""
+
+msgid "Blog title"
+msgstr ""
+
+msgid "Language"
+msgstr ""
+
+#, fuzzy
+msgid "Article license"
+msgstr "Licenza por omisión"
+
 #~ msgid "Create blog"
 #~ msgstr "Crear blog"
 
@@ -681,37 +766,3 @@ msgstr ""
 
 #~ msgid "You are not authorized."
 #~ msgstr "Non ten permiso."
-
-#~ msgid "Passwords are not matching"
-#~ msgstr "Con coinciden os contrasinais"
-
-#~ msgid "One author in this blog: "
-#~ msgid_plural "{0} authors in this blog: "
-#~ msgstr[0] "Unha autora en este blog: "
-#~ msgstr[1] "{0} autoras en este blog: "
-
-#~ msgid "One article in this blog"
-#~ msgid_plural "{0} articles in this blog"
-#~ msgstr[0] "Un artigo en este blog"
-#~ msgstr[1] "{0} artigos en este blog"
-
-#~ msgid "Your feed"
-#~ msgstr "Para vostede"
-
-#~ msgid "Home to"
-#~ msgstr "Fogar de"
-
-#~ msgid "people"
-#~ msgstr "persoas"
-
-#~ msgid "Who wrote"
-#~ msgstr "Que escribiron"
-
-#~ msgid "articles"
-#~ msgstr "artigos"
-
-#~ msgid "And connected to"
-#~ msgstr "E conectada a"
-
-#~ msgid "other instances"
-#~ msgstr "outras instancias"

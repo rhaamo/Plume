@@ -663,6 +663,90 @@ msgstr ""
 msgid "All rights reserved."
 msgstr ""
 
+msgid "Search"
+msgstr ""
+
+#, fuzzy
+msgid "Your query"
+msgstr "Din kommentar"
+
+msgid "Advanced search"
+msgstr ""
+
+msgid "Article title matching these words"
+msgstr ""
+
+msgid "Subtitle matching these words"
+msgstr ""
+
+msgid "Content matching these words"
+msgstr ""
+
+msgid "From this date"
+msgstr ""
+
+msgid "To this date"
+msgstr ""
+
+msgid "Containing these tags"
+msgstr ""
+
+msgid "Posted on one of these instances"
+msgstr ""
+
+msgid "Posted by one of these authors"
+msgstr ""
+
+msgid "Posted on one of these blogs"
+msgstr ""
+
+#, fuzzy
+msgid "Written in this language"
+msgstr "Den siden fant vi ikke."
+
+#, fuzzy
+msgid "Published under this license"
+msgstr "Denne artikkelen er publisert med lisensen {0}"
+
+msgid "Search result for \"{0}\""
+msgstr ""
+
+msgid "Search result"
+msgstr ""
+
+msgid "No result for your query"
+msgstr ""
+
+msgid "No more result for your query"
+msgstr ""
+
+msgid "Subtitle — byline"
+msgstr ""
+
+#, fuzzy
+msgid "Body content"
+msgstr "Innhold"
+
+msgid "Tags"
+msgstr ""
+
+#, fuzzy
+msgid "Instance domain"
+msgstr "Instillinger for instansen"
+
+msgid "Authors"
+msgstr ""
+
+msgid "Blog title"
+msgstr ""
+
+msgid "Language"
+msgstr ""
+
+#, fuzzy
+msgid "Article license"
+msgstr "Standardlisens"
+
 #~ msgid "Create blog"
 #~ msgstr "Opprett blogg"
 
@@ -678,36 +762,3 @@ msgstr ""
 
 #~ msgid "You are not authorized."
 #~ msgstr "Det har du har ikke tilgang til."
-
-#~ msgid "Passwords are not matching"
-#~ msgstr "Passordene stemmer ikke overens"
-
-#~ msgid "One author in this blog: "
-#~ msgid_plural "{0} authors in this blog: "
-#~ msgstr[0] "Én forfatter av denne bloggen: "
-#~ msgstr[1] "{0} forfattere av denne bloggen: "
-
-#~ msgid "One article in this blog"
-#~ msgid_plural "{0} articles in this blog"
-#~ msgstr[0] "Én artikkel i denne bloggen"
-#~ msgstr[1] "{0} artikler i denne bloggen"
-
-#, fuzzy
-#~ msgid "Your feed"
-#~ msgstr "Din kommentar"
-
-#~ msgid "Home to"
-#~ msgstr "Hjem for"
-
-#~ msgid "people"
-#~ msgstr "personer"
-
-#~ msgid "Who wrote"
-#~ msgstr "Som har skrevet"
-
-#~ msgid "articles"
-#~ msgstr "artikler"
-
-#, fuzzy
-#~ msgid "other instances"
-#~ msgstr "Om denne instansen"

@@ -665,6 +665,91 @@ msgstr "不要な場合は空にしてください"
 msgid "All rights reserved."
 msgstr ""
 
+msgid "Search"
+msgstr ""
+
+#, fuzzy
+msgid "Your query"
+msgstr "自分のフィード"
+
+msgid "Advanced search"
+msgstr ""
+
+msgid "Article title matching these words"
+msgstr ""
+
+msgid "Subtitle matching these words"
+msgstr ""
+
+msgid "Content matching these words"
+msgstr ""
+
+msgid "From this date"
+msgstr ""
+
+msgid "To this date"
+msgstr ""
+
+msgid "Containing these tags"
+msgstr ""
+
+msgid "Posted on one of these instances"
+msgstr ""
+
+msgid "Posted by one of these authors"
+msgstr ""
+
+msgid "Posted on one of these blogs"
+msgstr ""
+
+#, fuzzy
+msgid "Written in this language"
+msgstr "このページは見つかりませんでした。"
+
+#, fuzzy
+msgid "Published under this license"
+msgstr "この記事は {0} ライセンスの元で公開されています。"
+
+msgid "Search result for \"{0}\""
+msgstr ""
+
+msgid "Search result"
+msgstr ""
+
+#, fuzzy
+msgid "No result for your query"
+msgstr "ギャラリーを参照"
+
+msgid "No more result for your query"
+msgstr ""
+
+msgid "Subtitle — byline"
+msgstr ""
+
+#, fuzzy
+msgid "Body content"
+msgstr "コメント"
+
+msgid "Tags"
+msgstr ""
+
+#, fuzzy
+msgid "Instance domain"
+msgstr "インスタンスの設定"
+
+msgid "Authors"
+msgstr ""
+
+msgid "Blog title"
+msgstr ""
+
+msgid "Language"
+msgstr ""
+
+#, fuzzy
+msgid "Article license"
+msgstr "デフォルトのライセンス"
+
 #~ msgid "Create blog"
 #~ msgstr "ブログを作成"
 
@@ -680,80 +765,3 @@ msgstr ""
 
 #~ msgid "You are not authorized."
 #~ msgstr "認証されていません。"
-
-#~ msgid "Passwords are not matching"
-#~ msgstr "パスワードが一致しません"
-
-#~ msgid "One author in this blog: "
-#~ msgid_plural "{0} authors in this blog: "
-#~ msgstr[0] "ブログに {0} 人の作成者がいます: "
-
-#~ msgid "One article in this blog"
-#~ msgid_plural "{0} articles in this blog"
-#~ msgstr[0] "ブログに {0} 件の記事があります"
-
-#~ msgid "Your feed"
-#~ msgstr "自分のフィード"
-
-#~ msgid "Welcome to {{ instance_name | escape }}"
-#~ msgstr "{{ instance_name | escape }} へようこそ"
-
-#~ msgid ""
-#~ "Written by {{ link_1 }}{{ url }}{{ link_2 }}{{ name | escape }}"
-#~ "{{ link_3 }}"
-#~ msgstr ""
-#~ "{{ link_1 }}{{ url }}{{ link_2 }}{{ name | escape }}{{ link_3 }} さんが投"
-#~ "稿"
-
-#~ msgid "Open on {{ instance_url }}"
-#~ msgstr "{{ instance_url }} で開く"
-
-#~ msgid "{{ name | escape }}'s followers"
-#~ msgstr "{{ name | escape }} のフォロワー"
-
-#~ msgid ""
-#~ "By {{ link_1 }}{{ link_2 }}{{ link_3 }}{{ name | escape }}{{ link_4 }}"
-#~ msgstr ""
-#~ "{{ link_1 }}{{ link_2 }}{{ link_3 }}{{ name | escape }}{{ link_4 }} が投稿"
-
-#~ msgid "{{ user }} mentioned you."
-#~ msgstr "{{ user }} があなたをメンションしました。"
-
-#~ msgid "{{ user }} commented your article."
-#~ msgstr "{{ user }} があなたの記事にコメントしました。"
-
-#~ msgid "{{ user }} is now following you."
-#~ msgstr "{{ user }} はあなたをフォローしています。"
-
-#~ msgid "{{ user }} liked your article."
-#~ msgstr "{{ user }} があなたの記事にいいねしました。"
-
-#~ msgid "{{ user }} boosted your article."
-#~ msgstr "{{ user }} があなたの記事をブーストしました。"
-
-#~ msgid "About {{ instance_name }}"
-#~ msgstr "{{ instance_name }} について"
-
-#~ msgid "Home to"
-#~ msgstr "登録者数"
-
-#~ msgid "people"
-#~ msgstr "人"
-
-#~ msgid "Who wrote"
-#~ msgstr "投稿記事数"
-
-#~ msgid "articles"
-#~ msgstr "件"
-
-#~ msgid "And connected to"
-#~ msgstr "他のインスタンスからの接続数"
-
-#~ msgid "other instances"
-#~ msgstr "件"
-
-#~ msgid "Edit {{ post }}"
-#~ msgstr "{{ post }} を編集"
-
-#~ msgid "Administration of {{ instance.name }}"
-#~ msgstr "{{ instance.name }} の管理"

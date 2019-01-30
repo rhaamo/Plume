@@ -672,6 +672,91 @@ msgstr "Lascialo vuoto se non è presente nessuno"
 msgid "All rights reserved."
 msgstr ""
 
+msgid "Search"
+msgstr ""
+
+#, fuzzy
+msgid "Your query"
+msgstr "Il tuo flusso"
+
+msgid "Advanced search"
+msgstr ""
+
+msgid "Article title matching these words"
+msgstr ""
+
+msgid "Subtitle matching these words"
+msgstr ""
+
+msgid "Content matching these words"
+msgstr ""
+
+msgid "From this date"
+msgstr ""
+
+msgid "To this date"
+msgstr ""
+
+msgid "Containing these tags"
+msgstr ""
+
+msgid "Posted on one of these instances"
+msgstr ""
+
+msgid "Posted by one of these authors"
+msgstr ""
+
+msgid "Posted on one of these blogs"
+msgstr ""
+
+#, fuzzy
+msgid "Written in this language"
+msgstr "Non riusciamo a trovare questa pagina."
+
+#, fuzzy
+msgid "Published under this license"
+msgstr "Questo articolo è rilasciato con licenza {0} ."
+
+msgid "Search result for \"{0}\""
+msgstr ""
+
+msgid "Search result"
+msgstr ""
+
+#, fuzzy
+msgid "No result for your query"
+msgstr "Vai alla tua galleria"
+
+msgid "No more result for your query"
+msgstr ""
+
+msgid "Subtitle — byline"
+msgstr ""
+
+#, fuzzy
+msgid "Body content"
+msgstr "Contenuto"
+
+msgid "Tags"
+msgstr ""
+
+#, fuzzy
+msgid "Instance domain"
+msgstr "Impostazioni dell'istanza"
+
+msgid "Authors"
+msgstr ""
+
+msgid "Blog title"
+msgstr ""
+
+msgid "Language"
+msgstr ""
+
+#, fuzzy
+msgid "Article license"
+msgstr "Licenza predefinita"
+
 #~ msgid "Create blog"
 #~ msgstr "Crea blog"
 
@@ -687,37 +772,3 @@ msgstr ""
 
 #~ msgid "You are not authorized."
 #~ msgstr "Non sei autorizzato."
-
-#~ msgid "Passwords are not matching"
-#~ msgstr "Le password non corrispondono"
-
-#~ msgid "One author in this blog: "
-#~ msgid_plural "{0} authors in this blog: "
-#~ msgstr[0] "Un autore in questo blog: "
-#~ msgstr[1] "{0} autori in questo blog: "
-
-#~ msgid "One article in this blog"
-#~ msgid_plural "{0} articles in this blog"
-#~ msgstr[0] "Un articolo in questo blog"
-#~ msgstr[1] "{0} articoli in questo blog"
-
-#~ msgid "Your feed"
-#~ msgstr "Il tuo flusso"
-
-#~ msgid "Home to"
-#~ msgstr "Casa di"
-
-#~ msgid "people"
-#~ msgstr "persone"
-
-#~ msgid "Who wrote"
-#~ msgstr "Che hanno scritto"
-
-#~ msgid "articles"
-#~ msgstr "articoli"
-
-#~ msgid "And connected to"
-#~ msgstr "E connesso a"
-
-#~ msgid "other instances"
-#~ msgstr "altre istanze"

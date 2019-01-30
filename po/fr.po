@@ -673,41 +673,86 @@ msgstr "Illustration"
 msgid "None"
 msgstr "Aucun"
 
-#, fuzzy
 msgid "Leave empty to reserve all rights"
-msgstr "Laisser vide s’il n’y en a pas"
+msgstr "Laisser vide pour garder tous vos droits"
 
 msgid "All rights reserved."
-msgstr ""
+msgstr "Tous droits réservés"
 
-#~ msgid "Create blog"
-#~ msgstr "Créer le blog"
+msgid "Search"
+msgstr "Recherche"
 
-#~ msgid "New post"
-#~ msgstr "Nouvel article"
+msgid "Your query"
+msgstr "Votre recherche"
 
-#~ msgid "Create a post"
-#~ msgstr "Créer un article"
+msgid "Advanced search"
+msgstr "Recherche avancée"
 
-#, fuzzy
-#~ msgid "You need to be signed in, in order for you to like a post"
-#~ msgstr "Vous devez vous connecter pour aimer un article"
+msgid "Article title matching these words"
+msgstr "Titre contenant ces mots"
 
-#~ msgid "You are not authorized."
-#~ msgstr "Vous n’avez pas les droits."
+msgid "Subtitle matching these words"
+msgstr "Sous-titre contenant ces mots"
 
-#~ msgid "Passwords are not matching"
-#~ msgstr "Les mots de passe ne correspondent pas."
+msgid "Content matching these words"
+msgstr "Contenant ces mots"
 
-#~ msgid "One author in this blog: "
-#~ msgid_plural "{0} authors in this blog: "
-#~ msgstr[0] "{0} auteur⋅ice dans ce blog : "
-#~ msgstr[1] "{0} auteur⋅ice⋅s dans ce blog : "
+msgid "From this date"
+msgstr "À partir de cette date"
 
-#~ msgid "One article in this blog"
-#~ msgid_plural "{0} articles in this blog"
-#~ msgstr[0] "{0} article dans ce blog"
-#~ msgstr[1] "{0} articles dans ce blog"
+msgid "To this date"
+msgstr "Avant cette date"
 
-#~ msgid "Your feed"
-#~ msgstr "Votre flux"
+msgid "Containing these tags"
+msgstr "Avec ces tags"
+
+msgid "Posted on one of these instances"
+msgstr "Publié sur une de ces instances"
+
+msgid "Posted by one of these authors"
+msgstr "Écrit par un de ces auteur⋅ices"
+
+msgid "Posted on one of these blogs"
+msgstr "Publié dans un de ces blogs"
+
+msgid "Written in this language"
+msgstr "Écrit en"
+
+msgid "Published under this license"
+msgstr "Placé sous cette licence"
+
+msgid "Search result for \"{0}\""
+msgstr "Résultats pour « {0} »"
+
+msgid "Search result"
+msgstr "Résultats"
+
+msgid "No result for your query"
+msgstr "Aucun résultat pour votre recherche"
+
+msgid "No more result for your query"
+msgstr "Plus de résultats pour votre recherche"
+
+msgid "Subtitle — byline"
+msgstr "Sous-titre"
+
+msgid "Body content"
+msgstr "Texte"
+
+msgid "Tags"
+msgstr "Tags"
+
+msgid "Instance domain"
+msgstr "Domaine d'une instance"
+
+msgid "Authors"
+msgstr "Auteurs"
+
+msgid "Blog title"
+msgstr "Nom du blog"
+
+msgid "Language"
+msgstr "Langue"
+
+msgid "Article license"
+msgstr "Licence de l'article"
