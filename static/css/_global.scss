@@ -4,13 +4,24 @@ html, body {
  	background: $background;
  	color: $black;
  	font-family: $route159;
+        ::selection {
+		background: $lightpurple;
+        }
+	::-moz-selection {
+		background: $lightpurple;
+	}
 }
 
 a, a:visited {
  	color: $purple;
  	text-decoration: none;
 }
-
+a::selection { 
+	color: $white;
+}
+a::-moz-selection {
+	color: $white;
+}
 small {
  	margin-left: 1em;
  	color: transparentize($black, 0.6);
@@ -124,6 +135,10 @@ p.error {
  	flex-direction: row;
  	align-items: center;
   margin: 0px;
+}
+
+.user .avatar.medium {
+  margin-left: 0px;
 }
 
 .badge {
@@ -307,6 +322,10 @@ figure {
   figcaption {
     padding: 1em;
   }
+
+  audio, video {
+    width: 100%;
+  }
 }
 
 .preview {
@@ -316,6 +335,30 @@ figure {
   width: auto;
   height: auto;
   margin-right: 20px;
+}
+
+.media-preview {
+  min-height: 8em;
+
+  &:not(.image) {
+    background-color: #7765E3;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 4em;
+  }
+
+  &.unknown {
+    background-image: url('/static/images/unknown-file.svg');
+    display: block;
+  }
+
+  &.audio {
+    background-image: url('/static/images/audio-file.svg');
+  }
+
+  &.video {
+    background-image: url('/static/images/video-file.svg');
+  }
 }
 
 /// Avatars

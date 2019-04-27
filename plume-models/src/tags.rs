@@ -5,7 +5,7 @@ use plume_common::activity_pub::Hashtag;
 use schema::tags;
 use {ap_url, Connection, Error, Result};
 
-#[derive(Clone, Identifiable, Serialize, Queryable)]
+#[derive(Clone, Identifiable, Queryable)]
 pub struct Tag {
     pub id: i32,
     pub tag: String,
@@ -38,7 +38,12 @@ impl Tag {
         Ok(ht)
     }
 
-    pub fn from_activity(conn: &Connection, tag: &Hashtag, post: i32, is_hashtag: bool) -> Result<Tag> {
+    pub fn from_activity(
+        conn: &Connection,
+        tag: &Hashtag,
+        post: i32,
+        is_hashtag: bool,
+    ) -> Result<Tag> {
         Tag::insert(
             conn,
             NewTag {

@@ -3,7 +3,7 @@ rls
 **/*.rs.bk
 rls
 translations
-po/*.po~
+*.po~
 .env
 Rocket.toml
 !.gitkeep
@@ -19,3 +19,5 @@ search_index
 main.css
 *.wasm
 *.js
+.buildconfig
+__pycache__

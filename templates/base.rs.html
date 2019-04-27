@@ -1,17 +1,19 @@
+@use plume_models::CONFIG;
 @use template_utils::*;
 @use routes::*;
-@(ctx: BaseContext, title: &str, head: Content, header: Content, content: Content)
+@(ctx: BaseContext, title: String, head: Content, header: Content, content: Content)
 
 <!DOCTYPE html>
 <html>
     <head>
         <meta charset="utf-8" />
-        <title>@i18n!(ctx.1, title) ⋅ @i18n!(ctx.1, "Plume")</title>
+        <title>@title ⋅ @i18n!(ctx.1, "Plume")</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="stylesheet" href="@uri!(static_files: file = "css/main.css")" />
-        <link rel="stylesheet" href="@uri!(static_files: file = "css/feather.css")" />
+        <link rel="stylesheet" href="@uri!(plume_static_files: file = "css/main.css", _build_id = CACHE_NAME)" />
+        <link rel="stylesheet" href="@uri!(plume_static_files: file = "css/feather.css", _build_id = CACHE_NAME)" />
         <link rel="manifest" href="@uri!(instance::web_manifest)" />
-        <link rel="icon" type="image/png" href="@uri!(static_files: file = "icons/trwnh/feather-filled/plumeFeatherFilled64.png")">
+        <link rel="icon" type="image/png" href="@uri!(plume_static_files: file = CONFIG.logo.favicon.as_str(), _build_id = CACHE_NAME)">
+        <meta content='#282c37' name='theme-color'/>
         @:head()
     </head>
     <body>
@@ -22,7 +24,7 @@
             <div id="content">
                 <nav>
                     <a href="@uri!(instance::index)" class="title">
-			<div class="avatar small " style="background-image: url('https://sigpipe.me/static/media/64AB4210-B651-EA86-8A5E-B51B1BE7C4D3.png');" title="dashie's avatar" aria-label="dashie's avatar"></div>
+                        <img src="@uri!(plume_static_files: file = CONFIG.logo.main.as_str(), _build_id = CACHE_NAME)">
                         <p>raise(SIGPIPE);</p>
                     </a>
                     <hr/>
@@ -85,6 +87,6 @@
                 <a href="@uri!(instance::admin)">@i18n!(ctx.1, "Administration")</a>
             }
         </footer>
-        <script src="@uri!(static_files: file = "plume-front.js")"></script>
+        <script src="@uri!(plume_static_files: file = "plume-front.js", _build_id = CACHE_NAME)"></script>
     </body>
 </html>

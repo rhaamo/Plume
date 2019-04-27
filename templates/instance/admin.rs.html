@@ -7,7 +7,7 @@
 
 @(ctx: BaseContext, instance: Instance, form: InstanceSettingsForm, errors: ValidationErrors)
 
-@:base(ctx, i18n!(ctx.1, "Administration of {0}"; instance.name.clone()).as_str(), {}, {}, {
+@:base(ctx, i18n!(ctx.1, "Administration of {0}"; instance.name.clone()), {}, {}, {
   <h1>@i18n!(ctx.1, "Administration")</h1>
 
   @tabs(&[
@@ -27,7 +27,7 @@
       }
       @i18n!(ctx.1, "Allow anyone to register here")
 
-      <label for="short_description">@i18n!(ctx.1, "Short description - byline")<small>@i18n!(ctx.1, "Markdown syntax is supported")</small></label>
+      <label for="short_description">@i18n!(ctx.1, "Short description")<small>@i18n!(ctx.1, "Markdown syntax is supported")</small></label>
       <textarea id="short_description" name="short_description">@Html(form.short_description)</textarea>
 
       <label for="long_description">@i18n!(ctx.1, "Long description")<small>@i18n!(ctx.1, "Markdown syntax is supported")</small></label>

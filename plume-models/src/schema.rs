@@ -43,6 +43,10 @@ table! {
         ap_url -> Text,
         private_key -> Nullable<Text>,
         public_key -> Text,
+        fqn -> Text,
+        summary_html -> Text,
+        icon_id -> Nullable<Int4>,
+        banner_id -> Nullable<Int4>,
     }
 }
 
@@ -201,6 +205,8 @@ table! {
         followers_endpoint -> Varchar,
         avatar_id -> Nullable<Int4>,
         last_fetched_date -> Timestamp,
+        fqn -> Text,
+        summary_html -> Text,
     }
 }
 

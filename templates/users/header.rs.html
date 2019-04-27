@@ -10,8 +10,8 @@
             @avatar(ctx.0, &user, Size::Medium, false, ctx.1)
 
             <h1 class="grow flex vertical">
-                <span class="p-name">@user.name(ctx.0)</span>
-                <small class="p-nickname">@user.get_fqn(ctx.0)</small>
+                <span class="p-name">@user.name()</span>
+                <small class="p-nickname">@user.fqn</small>
             </h1>
 
             <p>
@@ -32,17 +32,17 @@
             <a class="u-url" href="@user.ap_url"></a>
         }
 
-        @if ctx.2.clone().map(|u| u.id != user.id).unwrap_or(false) {
-            <form class="inline" method="post" action="@uri!(user::follow: name = user.get_fqn(ctx.0))">
+        @if ctx.2.clone().map(|u| u.id != user.id).unwrap_or(true) {
+            <form class="inline" method="post" action="@uri!(user::follow: name = &user.fqn)">
             @if follows {
-                <input type="submit" value="@i18n!(ctx.1, "Unfollow")">
+                <input type="submit" value="@i18n!(ctx.1, "Unsubscribe")">
             } else {
-                <input type="submit" value="@i18n!(ctx.1, "Follow")">
+                <input type="submit" value="@i18n!(ctx.1, "Subscribe")">
             }
             </form>
         }
     </div>
     <div class="user-summary p-note">
-        @Html(user.summary.clone())
+        @Html(user.summary_html.clone())
     </div>
 </div>

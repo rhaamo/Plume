@@ -1,4 +1,4 @@
-use activitypub::{Activity, Actor, Link, Object};
+use activitypub::{Activity, Link, Object};
 use array_tool::vec::Uniq;
 use reqwest::Client;
 use rocket::{
@@ -16,9 +16,10 @@ pub mod request;
 pub mod sign;
 
 pub const CONTEXT_URL: &str = "https://www.w3.org/ns/activitystreams";
-pub const PUBLIC_VISIBILTY: &str = "https://www.w3.org/ns/activitystreams#Public";
+pub const PUBLIC_VISIBILITY: &str = "https://www.w3.org/ns/activitystreams#Public";
 
-pub const AP_CONTENT_TYPE: &str = r#"application/ld+json; profile="https://www.w3.org/ns/activitystreams""#;
+pub const AP_CONTENT_TYPE: &str =
+    r#"application/ld+json; profile="https://www.w3.org/ns/activitystreams""#;
 
 pub fn ap_accept_header() -> Vec<&'static str> {
     vec![
@@ -106,21 +107,27 @@ impl<'a, 'r> FromRequest<'a, 'r> for ApRequest {
             .unwrap_or(Outcome::Forward(()))
     }
 }
-pub fn broadcast<S: sign::Signer, A: Activity, T: inbox::WithInbox + Actor>(
-    sender: &S,
-    act: A,
-    to: Vec<T>,
-) {
+pub fn broadcast<S, A, T, C>(sender: &S, act: A, to: Vec<T>)
+where
+    S: sign::Signer,
+    A: Activity,
+    T: inbox::AsActor<C>,
+{
     let boxes = to
         .into_iter()
         .filter(|u| !u.is_local())
-        .map(|u| u.get_shared_inbox_url().unwrap_or_else(|| u.get_inbox_url()))
+        .map(|u| {
+            u.get_shared_inbox_url()
+                .unwrap_or_else(|| u.get_inbox_url())
+        })
         .collect::<Vec<String>>()
         .unique();
 
     let mut act = serde_json::to_value(act).expect("activity_pub::broadcast: serialization error");
     act["@context"] = context();
-    let signed = act.sign(sender).expect("activity_pub::broadcast: signature error");
+    let signed = act
+        .sign(sender)
+        .expect("activity_pub::broadcast: signature error");
 
     for inbox in boxes {
         // TODO: run it in Sidekiq or something like that
@@ -130,7 +137,11 @@ pub fn broadcast<S: sign::Signer, A: Activity, T: inbox::WithInbox + Actor>(
         let res = Client::new()
             .post(&inbox)
             .headers(headers.clone())
-            .header("Signature", request::signature(sender, &headers).expect("activity_pub::broadcast: request signature error"))
+            .header(
+                "Signature",
+                request::signature(sender, &headers)
+                    .expect("activity_pub::broadcast: request signature error"),
+            )
             .body(body)
             .send();
         match res {
