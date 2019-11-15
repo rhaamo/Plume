@@ -1,22 +1,59 @@
 #![warn(clippy::too_many_arguments)]
 use atom_syndication::{ContentBuilder, Entry, EntryBuilder, LinkBuilder, Person, PersonBuilder};
+use plume_models::{posts::Post, Connection, CONFIG, ITEMS_PER_PAGE};
 use rocket::{
     http::{
-        hyper::header::{CacheControl, CacheDirective},
+        hyper::header::{CacheControl, CacheDirective, ETag, EntityTag},
         uri::{FromUriParam, Query},
         RawStr, Status,
     },
     request::{self, FromFormValue, FromRequest, Request},
-    response::NamedFile,
+    response::{self, Flash, NamedFile, Redirect, Responder, Response},
     Outcome,
 };
-use std::path::{Path, PathBuf};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::Hasher,
+    path::{Path, PathBuf},
+};
+use template_utils::Ructe;
 
-use plume_models::{posts::Post, Connection};
+/// Special return type used for routes that "cannot fail", and instead
+/// `Redirect`, or `Flash<Redirect>`, when we cannot deliver a `Ructe` Response
+#[allow(clippy::large_enum_variant)]
+#[derive(Responder)]
+pub enum RespondOrRedirect {
+    Response(Ructe),
+    FlashResponse(Flash<Ructe>),
+    Redirect(Redirect),
+    FlashRedirect(Flash<Redirect>),
+}
 
-const ITEMS_PER_PAGE: i32 = 12;
+impl From<Ructe> for RespondOrRedirect {
+    fn from(response: Ructe) -> Self {
+        RespondOrRedirect::Response(response)
+    }
+}
 
-#[derive(Copy, Clone, UriDisplayQuery)]
+impl From<Flash<Ructe>> for RespondOrRedirect {
+    fn from(response: Flash<Ructe>) -> Self {
+        RespondOrRedirect::FlashResponse(response)
+    }
+}
+
+impl From<Redirect> for RespondOrRedirect {
+    fn from(redirect: Redirect) -> Self {
+        RespondOrRedirect::Redirect(redirect)
+    }
+}
+
+impl From<Flash<Redirect>> for RespondOrRedirect {
+    fn from(redirect: Flash<Redirect>) -> Self {
+        RespondOrRedirect::FlashRedirect(redirect)
+    }
+}
+
+#[derive(Shrinkwrap, Copy, Clone, UriDisplayQuery)]
 pub struct Page(i32);
 
 impl<'v> FromFormValue<'v> for Page {
@@ -52,6 +89,7 @@ impl Page {
     }
 }
 
+#[derive(Shrinkwrap)]
 pub struct ContentLen(pub u64);
 
 impl<'a, 'r> FromRequest<'a, 'r> for ContentLen {
@@ -72,7 +110,7 @@ impl Default for Page {
 }
 
 /// A form for remote interaction, used by multiple routes
-#[derive(Clone, Default, FromForm)]
+#[derive(Shrinkwrap, Clone, Default, FromForm)]
 pub struct RemoteForm {
     pub remote: String,
 }
@@ -121,6 +159,7 @@ pub mod reshares;
 pub mod search;
 pub mod session;
 pub mod tags;
+pub mod timelines;
 pub mod user;
 pub mod well_known;
 
@@ -131,11 +170,54 @@ pub struct CachedFile {
     cache_control: CacheControl,
 }
 
+#[derive(Debug)]
+pub struct ThemeFile(NamedFile);
+
+impl<'r> Responder<'r> for ThemeFile {
+    fn respond_to(self, r: &Request) -> response::Result<'r> {
+        let contents = std::fs::read(self.0.path()).map_err(|_| Status::InternalServerError)?;
+
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&contents);
+        let etag = format!("{:x}", hasher.finish());
+
+        if r.headers()
+            .get("If-None-Match")
+            .any(|s| s[1..s.len() - 1] == etag)
+        {
+            Response::build()
+                .status(Status::NotModified)
+                .header(ETag(EntityTag::strong(etag)))
+                .ok()
+        } else {
+            Response::build()
+                .merge(self.0.respond_to(r)?)
+                .header(ETag(EntityTag::strong(etag)))
+                .ok()
+        }
+    }
+}
+
+#[get("/static/cached/<_build_id>/css/<file..>", rank = 1)]
+pub fn theme_files(file: PathBuf, _build_id: &RawStr) -> Option<ThemeFile> {
+    NamedFile::open(Path::new("static/css/").join(file))
+        .ok()
+        .map(ThemeFile)
+}
+
 #[get("/static/cached/<_build_id>/<file..>", rank = 2)]
 pub fn plume_static_files(file: PathBuf, _build_id: &RawStr) -> Option<CachedFile> {
     static_files(file)
 }
-
+#[get("/static/media/<file..>")]
+pub fn plume_media_files(file: PathBuf) -> Option<CachedFile> {
+    NamedFile::open(Path::new(&CONFIG.media_directory).join(file))
+        .ok()
+        .map(|f| CachedFile {
+            inner: f,
+            cache_control: CacheControl(vec![CacheDirective::MaxAge(60 * 60 * 24 * 30)]),
+        })
+}
 #[get("/static/<file..>", rank = 3)]
 pub fn static_files(file: PathBuf) -> Option<CachedFile> {
     NamedFile::open(Path::new("static/").join(file))

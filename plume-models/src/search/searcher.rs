@@ -1,9 +1,11 @@
 use instance::Instance;
 use posts::Post;
+use schema::posts;
 use tags::Tag;
 use Connection;
 
 use chrono::Datelike;
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use itertools::Itertools;
 use std::{cmp, fs::create_dir_all, path::Path, sync::Mutex};
 use tantivy::{
@@ -146,6 +148,10 @@ impl Searcher {
     }
 
     pub fn add_document(&self, conn: &Connection, post: &Post) -> Result<()> {
+        if !post.published {
+            return Ok(());
+        }
+
         let schema = self.index.schema();
 
         let post_id = schema.get_field("post_id").unwrap();
@@ -220,6 +226,16 @@ impl Searcher {
                 //borrow checker don't want me to use filter_map or and_then here
             })
             .collect()
+    }
+
+    pub fn fill(&self, conn: &Connection) -> Result<()> {
+        for post in posts::table
+            .filter(posts::published.eq(true))
+            .load::<Post>(conn)?
+        {
+            self.update_document(conn, &post)?
+        }
+        Ok(())
     }
 
     pub fn commit(&self) {

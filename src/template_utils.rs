@@ -1,11 +1,11 @@
-use plume_models::{notifications::*, users::User, Connection};
+use plume_models::{notifications::*, users::User, Connection, PlumeRocket};
 
 use rocket::http::hyper::header::{ETag, EntityTag};
 use rocket::http::{Method, Status};
 use rocket::request::Request;
 use rocket::response::{self, content::Html as HtmlCt, Responder, Response};
 use rocket_i18n::Catalog;
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{btree_map::BTreeMap, hash_map::DefaultHasher};
 use std::hash::Hasher;
 use templates::Html;
 
@@ -13,7 +13,41 @@ pub use askama_escape::escape;
 
 pub static CACHE_NAME: &str = env!("CACHE_ID");
 
-pub type BaseContext<'a> = &'a (&'a Connection, &'a Catalog, Option<User>);
+pub type BaseContext<'a> = &'a (
+    &'a Connection,
+    &'a Catalog,
+    Option<User>,
+    Option<(String, String)>,
+);
+
+pub trait IntoContext {
+    fn to_context(
+        &self,
+    ) -> (
+        &Connection,
+        &Catalog,
+        Option<User>,
+        Option<(String, String)>,
+    );
+}
+
+impl IntoContext for PlumeRocket {
+    fn to_context(
+        &self,
+    ) -> (
+        &Connection,
+        &Catalog,
+        Option<User>,
+        Option<(String, String)>,
+    ) {
+        (
+            &*self.conn,
+            &self.intl.catalog,
+            self.user.clone(),
+            self.flash_msg.clone(),
+        )
+    }
+}
 
 #[derive(Debug)]
 pub struct Ructe(pub Vec<u8>);
@@ -74,6 +108,15 @@ pub fn translate_notification(ctx: BaseContext, notif: Notification) -> String {
     }
 }
 
+pub fn i18n_timeline_name(cat: &Catalog, tl: &str) -> String {
+    match tl {
+        "Your feed" => i18n!(cat, "Your feed"),
+        "Local feed" => i18n!(cat, "Local feed"),
+        "Federated feed" => i18n!(cat, "Federated feed"),
+        n => n.to_string(),
+    }
+}
+
 pub enum Size {
     Small,
     Medium,
@@ -109,11 +152,11 @@ pub fn avatar(
     ))
 }
 
-pub fn tabs(links: &[(&str, String, bool)]) -> Html<String> {
+pub fn tabs(links: &[(impl AsRef<str>, String, bool)]) -> Html<String> {
     let mut res = String::from(r#"<div class="tabs">"#);
     for (url, title, selected) in links {
-        res.push_str(r#"<a href=""#);
-        res.push_str(url);
+        res.push_str(r#"<a dir="auto" href=""#);
+        res.push_str(url.as_ref());
         if *selected {
             res.push_str(r#"" class="selected">"#);
         } else {
@@ -142,14 +185,14 @@ pub fn paginate_param(
             p
         })
         .unwrap_or_default();
-    res.push_str(r#"<div class="pagination">"#);
+    res.push_str(r#"<div class="pagination" dir="auto">"#);
     if page != 1 {
         res.push_str(
             format!(
                 r#"<a href="?{}page={}">{}</a>"#,
                 param,
                 page - 1,
-                catalog.gettext("Previous page")
+                i18n!(catalog, "Previous page")
             )
             .as_str(),
         );
@@ -160,7 +203,7 @@ pub fn paginate_param(
                 r#"<a href="?{}page={}">{}</a>"#,
                 param,
                 page + 1,
-                catalog.gettext("Next page")
+                i18n!(catalog, "Next page")
             )
             .as_str(),
         );
@@ -197,114 +240,143 @@ macro_rules! icon {
     };
 }
 
-macro_rules! input {
-    ($catalog:expr, $name:tt ($kind:tt), $label:expr, $optional:expr, $details:expr, $form:expr, $err:expr, $props:expr) => {{
-        use std::borrow::Cow;
-        use validator::ValidationErrorsKind;
-        let cat = $catalog;
+/// A builder type to generate `<input>` tags in a type-safe way.
+///
+/// # Example
+///
+/// This example uses all options, but you don't have to specify everything.
+///
+/// ```rust
+/// # let current_email = "foo@bar.baz";
+/// # let catalog = gettext::Catalog::parse("").unwrap();
+/// Input::new("mail", "Your email address")
+///     .input_type("email")
+///     .default(current_email)
+///     .optional()
+///     .details("We won't use it for advertising.")
+///     .set_prop("class", "email-input")
+///     .to_html(catalog);
+/// ```
+pub struct Input {
+    /// The name of the input (`name` and `id` in HTML).
+    name: String,
+    /// The description of this field.
+    label: String,
+    /// The `type` of the input (`text`, `email`, `password`, etc).
+    input_type: String,
+    /// The default value for this input field.
+    default: Option<String>,
+    /// `true` if this field is not required (will add a little badge next to the label).
+    optional: bool,
+    /// A small message to display next to the label.
+    details: Option<String>,
+    /// Additional HTML properties.
+    props: BTreeMap<String, String>,
+    /// The error message to show next to this field.
+    error: Option<String>,
+}
+
+impl Input {
+    /// Creates a new input with a given name.
+    pub fn new(name: impl ToString, label: impl ToString) -> Input {
+        Input {
+            name: name.to_string(),
+            label: label.to_string(),
+            input_type: "text".into(),
+            default: None,
+            optional: false,
+            details: None,
+            props: BTreeMap::new(),
+            error: None,
+        }
+    }
+
+    /// Set the `type` of this input.
+    pub fn input_type(mut self, t: impl ToString) -> Input {
+        self.input_type = t.to_string();
+        self
+    }
+
+    /// Marks this field as optional.
+    pub fn optional(mut self) -> Input {
+        self.optional = true;
+        self
+    }
+
+    /// Fills the input with a default value (useful for edition form, to show the current values).
+    pub fn default(mut self, val: impl ToString) -> Input {
+        self.default = Some(val.to_string());
+        self
+    }
+
+    /// Adds additional information next to the label.
+    pub fn details(mut self, text: impl ToString) -> Input {
+        self.details = Some(text.to_string());
+        self
+    }
+
+    /// Defines an additional HTML property.
+    ///
+    /// This method can be called multiple times for the same input.
+    pub fn set_prop(mut self, key: impl ToString, val: impl ToString) -> Input {
+        self.props.insert(key.to_string(), val.to_string());
+        self
+    }
+
+    /// Shows an error message
+    pub fn error(mut self, errs: &validator::ValidationErrors) -> Input {
+        if let Some(field_errs) = errs.clone().field_errors().get(self.name.as_str()) {
+            self.error = Some(
+                field_errs[0]
+                    .message
+                    .clone()
+                    .unwrap_or_default()
+                    .to_string(),
+            );
+        }
+        self
+    }
+
+    /// Returns the HTML markup for this field.
+    pub fn html(mut self, cat: &Catalog) -> Html<String> {
+        if !self.optional {
+            self = self.set_prop("required", true);
+        }
 
         Html(format!(
             r#"
-                <label for="{name}">
+                <label for="{name}" dir="auto">
                     {label}
                     {optional}
                     {details}
                 </label>
                 {error}
-                <input type="{kind}" id="{name}" name="{name}" value="{val}" {props}/>
+                <input type="{kind}" id="{name}" name="{name}" value="{val}" {props} dir="auto"/>
                 "#,
-            name = stringify!($name),
-            label = i18n!(cat, $label),
-            kind = stringify!($kind),
-            optional = if $optional {
+            name = self.name,
+            label = self.label,
+            kind = self.input_type,
+            optional = if self.optional {
                 format!("<small>{}</small>", i18n!(cat, "Optional"))
             } else {
                 String::new()
             },
-            details = if $details.len() > 0 {
-                format!("<small>{}</small>", i18n!(cat, $details))
-            } else {
-                String::new()
-            },
-            error = if let Some(ValidationErrorsKind::Field(errs)) =
-                $err.errors().get(stringify!($name))
-            {
-                format!(
-                    r#"<p class="error">{}</p>"#,
-                    errs[0]
-                        .message
-                        .clone()
-                        .unwrap_or(Cow::from("Unknown error"))
-                )
-            } else {
-                String::new()
-            },
-            val = escape(&$form.$name),
-            props = $props
+            details = self
+                .details
+                .map(|d| format!("<small>{}</small>", d))
+                .unwrap_or_default(),
+            error = self
+                .error
+                .map(|e| format!(r#"<p class="error" dir="auto">{}</p>"#, e))
+                .unwrap_or_default(),
+            val = escape(&self.default.unwrap_or_default()),
+            props = self
+                .props
+                .into_iter()
+                .fold(String::new(), |mut res, (key, val)| {
+                    res.push_str(&format!("{}=\"{}\" ", key, val));
+                    res
+                })
         ))
-    }};
-    ($catalog:expr, $name:tt (optional $kind:tt), $label:expr, $details:expr, $form:expr, $err:expr, $props:expr) => {
-        input!(
-            $catalog,
-            $name($kind),
-            $label,
-            true,
-            $details,
-            $form,
-            $err,
-            $props
-        )
-    };
-    ($catalog:expr, $name:tt (optional $kind:tt), $label:expr, $form:expr, $err:expr, $props:expr) => {
-        input!(
-            $catalog,
-            $name($kind),
-            $label,
-            true,
-            "",
-            $form,
-            $err,
-            $props
-        )
-    };
-    ($catalog:expr, $name:tt ($kind:tt), $label:expr, $details:expr, $form:expr, $err:expr, $props:expr) => {
-        input!(
-            $catalog,
-            $name($kind),
-            $label,
-            false,
-            $details,
-            $form,
-            $err,
-            $props
-        )
-    };
-    ($catalog:expr, $name:tt ($kind:tt), $label:expr, $form:expr, $err:expr, $props:expr) => {
-        input!(
-            $catalog,
-            $name($kind),
-            $label,
-            false,
-            "",
-            $form,
-            $err,
-            $props
-        )
-    };
-    ($catalog:expr, $name:tt ($kind:tt), $label:expr, $form:expr, $err:expr) => {
-        input!($catalog, $name($kind), $label, false, "", $form, $err, "")
-    };
-    ($catalog:expr, $name:tt ($kind:tt), $label:expr, $props:expr) => {{
-        let cat = $catalog;
-        Html(format!(
-            r#"
-                <label for="{name}">{label}</label>
-                <input type="{kind}" id="{name}" name="{name}" {props}/>
-                "#,
-            name = stringify!($name),
-            label = i18n!(cat, $label),
-            kind = stringify!($kind),
-            props = $props
-        ))
-    }};
+    }
 }

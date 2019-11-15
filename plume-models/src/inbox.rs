@@ -53,6 +53,7 @@ pub fn inbox(ctx: &PlumeRocket, act: serde_json::Value) -> Result<InboxResult, E
         .with::<User, Create, Post>()
         .with::<User, Delete, Comment>()
         .with::<User, Delete, Post>()
+        .with::<User, Delete, User>()
         .with::<User, Follow, User>()
         .with::<User, Like, Post>()
         .with::<User, Undo, Reshare>()
@@ -134,7 +135,6 @@ pub(crate) mod tests {
                 }
                 _ => panic!("Unexpected result"),
             };
-
             Ok(())
         });
     }
@@ -169,7 +169,6 @@ pub(crate) mod tests {
                 }
                 _ => panic!("Unexpected result"),
             };
-
             Ok(())
         });
     }
@@ -211,7 +210,6 @@ pub(crate) mod tests {
                 }
                 _ => panic!("Unexpected result"),
             };
-
             Ok(())
         });
     }
@@ -254,9 +252,8 @@ pub(crate) mod tests {
                 "type": "Delete",
             });
             assert!(super::inbox(&r, ok_act).is_ok());
-
             Ok(())
-        });
+        })
     }
 
     #[test]
@@ -281,6 +278,33 @@ pub(crate) mod tests {
                 "type": "Delete",
             });
             assert!(super::inbox(&r, ok_act).is_ok());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn delete_user() {
+        let r = rockets();
+        let conn = &*r.conn;
+        conn.test_transaction::<_, (), _>(|| {
+            let (_, users, _) = fill_database(&r);
+
+            let fail_act = json!({
+                "id": "https://plu.me/@/Admin#delete",
+                "actor": users[1].ap_url, // Not the same account
+                "object": users[0].ap_url,
+                "type": "Delete",
+            });
+            assert!(super::inbox(&r, fail_act).is_err());
+
+            let ok_act = json!({
+                "id": "https://plu.me/@/Admin#delete",
+                "actor": users[0].ap_url,
+                "object": users[0].ap_url,
+                "type": "Delete",
+            });
+            assert!(super::inbox(&r, ok_act).is_ok());
+            assert!(crate::users::User::get(conn, users[0].id).is_err());
 
             Ok(())
         });
@@ -307,7 +331,6 @@ pub(crate) mod tests {
                 }
                 _ => panic!("Unexpected result"),
             }
-
             Ok(())
         });
     }
@@ -333,7 +356,6 @@ pub(crate) mod tests {
                 }
                 _ => panic!("Unexpected result"),
             }
-
             Ok(())
         });
     }
@@ -372,7 +394,6 @@ pub(crate) mod tests {
                 "type": "Undo",
             });
             assert!(super::inbox(&r, ok_act).is_ok());
-
             Ok(())
         });
     }
@@ -411,7 +432,6 @@ pub(crate) mod tests {
                 "type": "Undo",
             });
             assert!(super::inbox(&r, ok_act).is_ok());
-
             Ok(())
         });
     }
@@ -450,7 +470,6 @@ pub(crate) mod tests {
                 "type": "Undo",
             });
             assert!(super::inbox(&r, ok_act).is_ok());
-
             Ok(())
         });
     }
@@ -480,7 +499,6 @@ pub(crate) mod tests {
             });
 
             super::inbox(&r, act).unwrap();
-
             Ok(())
         });
     }

@@ -1,12 +1,12 @@
 #![feature(try_trait)]
 #![feature(never_type)]
 #![feature(custom_attribute)]
+#![feature(proc_macro_hygiene)]
 
 extern crate activitypub;
 extern crate ammonia;
 extern crate askama_escape;
 extern crate bcrypt;
-extern crate canapi;
 extern crate chrono;
 #[macro_use]
 extern crate diesel;
@@ -15,9 +15,12 @@ extern crate heck;
 extern crate itertools;
 #[macro_use]
 extern crate lazy_static;
+extern crate migrations_internals;
 extern crate openssl;
 extern crate plume_api;
 extern crate plume_common;
+#[macro_use]
+extern crate plume_macro;
 extern crate reqwest;
 extern crate rocket;
 extern crate rocket_i18n;
@@ -30,12 +33,9 @@ extern crate serde_json;
 #[macro_use]
 extern crate tantivy;
 extern crate url;
+extern crate walkdir;
 extern crate webfinger;
 extern crate whatlang;
-
-#[cfg(test)]
-#[macro_use]
-extern crate diesel_migrations;
 
 use plume_common::activity_pub::inbox::InboxError;
 
@@ -63,9 +63,11 @@ pub enum Error {
     SerDe,
     Search(search::SearcherError),
     Signature,
+    TimelineQuery(timeline::query::QueryError),
     Unauthorized,
     Url,
     Webfinger,
+    Expired,
 }
 
 impl From<bcrypt::BcryptError> for Error {
@@ -73,7 +75,7 @@ impl From<bcrypt::BcryptError> for Error {
         Error::Signature
     }
 }
-
+pub const ITEMS_PER_PAGE: i32 = 12;
 impl From<openssl::error::ErrorStack> for Error {
     fn from(_: openssl::error::ErrorStack) -> Self {
         Error::Signature
@@ -137,6 +139,12 @@ impl From<search::SearcherError> for Error {
     }
 }
 
+impl From<timeline::query::QueryError> for Error {
+    fn from(err: timeline::query::QueryError) -> Self {
+        Error::TimelineQuery(err)
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Error::Io(err)
@@ -153,8 +161,6 @@ impl From<InboxError<Error>> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-
-pub type ApiResult<T> = std::result::Result<T, canapi::Error>;
 
 /// Adds a function to a model, that returns the first
 /// matching row for a given list of fields.
@@ -175,11 +181,8 @@ macro_rules! find_by {
         pub fn $fn(conn: &crate::Connection, $($col: $type),+) -> Result<Self> {
             $table::table
                 $(.filter($table::$col.eq($col)))+
-                .limit(1)
-                .load::<Self>(conn)?
-                .into_iter()
-                .next()
-                .ok_or(Error::NotFound)
+                .first(conn)
+                .map_err(Error::from)
         }
     };
 }
@@ -225,11 +228,8 @@ macro_rules! get {
         pub fn get(conn: &crate::Connection, id: i32) -> Result<Self> {
             $table::table
                 .filter($table::id.eq(id))
-                .limit(1)
-                .load::<Self>(conn)?
-                .into_iter()
-                .next()
-                .ok_or(Error::NotFound)
+                .first(conn)
+                .map_err(Error::from)
         }
     };
 }
@@ -282,11 +282,8 @@ macro_rules! last {
         pub fn last(conn: &crate::Connection) -> Result<Self> {
             $table::table
                 .order_by($table::id.desc())
-                .limit(1)
-                .load::<Self>(conn)?
-                .into_iter()
-                .next()
-                .ok_or(Error::NotFound)
+                .first(conn)
+                .map_err(Error::from)
         }
     };
 }
@@ -303,19 +300,14 @@ pub fn ap_url(url: &str) -> String {
 mod tests {
     use db_conn;
     use diesel::r2d2::ConnectionManager;
-    #[cfg(feature = "sqlite")]
-    use diesel::{dsl::sql_query, RunQueryDsl};
+    use migrations::IMPORTED_MIGRATIONS;
+    use plume_common::utils::random_hex;
     use scheduled_thread_pool::ScheduledThreadPool;
     use search;
+    use std::env::temp_dir;
     use std::sync::Arc;
     use Connection as Conn;
     use CONFIG;
-
-    #[cfg(feature = "sqlite")]
-    embed_migrations!("../migrations/sqlite");
-
-    #[cfg(feature = "postgres")]
-    embed_migrations!("../migrations/postgres");
 
     #[macro_export]
     macro_rules! part_eq {
@@ -335,10 +327,13 @@ mod tests {
     lazy_static! {
         static ref DB_POOL: db_conn::DbPool = {
             let pool = db_conn::DbPool::builder()
-                .connection_customizer(Box::new(db_conn::PragmaForeignKey))
+                .connection_customizer(Box::new(db_conn::tests::TestConnectionCustomizer))
                 .build(ConnectionManager::<Conn>::new(CONFIG.database_url.as_str()))
                 .unwrap();
-            embedded_migrations::run(&*pool.get().unwrap()).expect("Migrations error");
+            let dir = temp_dir().join(format!("plume-test-{}", random_hex()));
+            IMPORTED_MIGRATIONS
+                .run_pending_migrations(&pool.get().unwrap(), &dir)
+                .expect("Migrations error");
             pool
         };
     }
@@ -366,16 +361,21 @@ pub mod headers;
 pub mod inbox;
 pub mod instance;
 pub mod likes;
+pub mod lists;
 pub mod medias;
 pub mod mentions;
+pub mod migrations;
 pub mod notifications;
+pub mod password_reset_requests;
 pub mod plume_rocket;
 pub mod post_authors;
 pub mod posts;
 pub mod reshares;
 pub mod safe_string;
+#[allow(unused_imports)]
 pub mod schema;
 pub mod search;
 pub mod tags;
+pub mod timeline;
 pub mod users;
 pub use plume_rocket::PlumeRocket;

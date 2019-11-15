@@ -1,16 +1,17 @@
 @use plume_models::CONFIG;
+@use plume_models::instance::Instance;
 @use template_utils::*;
 @use routes::*;
+@use std::path::Path;
 @(ctx: BaseContext, title: String, head: Content, header: Content, content: Content)
 
 <!DOCTYPE html>
-<html>
+<html class="@ctx.2.clone().and_then(|u| u.preferred_theme).unwrap_or_else(|| CONFIG.default_theme.clone())">
     <head>
         <meta charset="utf-8" />
         <title>@title ⋅ @i18n!(ctx.1, "Plume")</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="stylesheet" href="@uri!(plume_static_files: file = "css/main.css", _build_id = CACHE_NAME)" />
-        <link rel="stylesheet" href="@uri!(plume_static_files: file = "css/feather.css", _build_id = CACHE_NAME)" />
+        <link rel="stylesheet" href="@uri!(plume_static_files: file = Path::new("css").join(ctx.2.clone().and_then(|u| u.preferred_theme).unwrap_or_else(|| CONFIG.default_theme.clone())).join("theme.css"), _build_id = CACHE_NAME)" />
         <link rel="manifest" href="@uri!(instance::web_manifest)" />
         <link rel="icon" type="image/png" href="@uri!(plume_static_files: file = CONFIG.logo.favicon.as_str(), _build_id = CACHE_NAME)">
         <meta content='#282c37' name='theme-color'/>
@@ -75,17 +76,30 @@
                 </nav>
             </div>
         </header>
+        <div class="messages">
+            @if let Some(ref message) = ctx.3 {
+                <p class="flash-message @message.0">@message.1</p>
+            }
+        </div>
         <main>
             @:content()
         </main>
         <footer>
-            <span>@concat!("Plume ", env!("CARGO_PKG_VERSION"))</span>
-            <a href="@uri!(instance::about)">@i18n!(ctx.1, "About this instance")</a>
-            <a href="https://github.com/rhaamo/Plume/tree/dashie">@i18n!(ctx.1, "Source code")</a>
-            <a href="https://riot.im/app/#/room/#plume:disroot.org">@i18n!(ctx.1, "Matrix room")</a>
-            @if ctx.2.clone().map(|a| a.is_admin).unwrap_or(false) {
-                <a href="@uri!(instance::admin)">@i18n!(ctx.1, "Administration")</a>
-            }
+            <hr/>
+            <div>
+                <h3>@Instance::get_local().map(|i| i.name).unwrap_or_default()</h3>
+                <a href="@uri!(instance::about)">@i18n!(ctx.1, "About this instance")</a>
+                <a href="@uri!(instance::privacy)">@i18n!(ctx.1, "Privacy policy")</a>
+                @if ctx.2.clone().map(|u| u.is_admin()).unwrap_or(false) {
+                    <a href="@uri!(instance::admin)">@i18n!(ctx.1, "Administration")</a>
+                }
+            </div>
+            <div>
+                <h3>@concat!("Plume ", env!("CARGO_PKG_VERSION"))</h3>
+                <a href="https://docs.joinplu.me">@i18n!(ctx.1, "Documentation")</a>
+                <a href="https://github.com/rhaamo/Plume/tree/dashie">@i18n!(ctx.1, "Source code")</a>
+                <a href="https://riot.im/app/#/room/#plume:disroot.org">@i18n!(ctx.1, "Matrix room")</a>
+            </div>
         </footer>
         <script src="@uri!(plume_static_files: file = "plume-front.js", _build_id = CACHE_NAME)"></script>
     </body>

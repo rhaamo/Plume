@@ -4,11 +4,12 @@ use diesel::{self, ExpressionMethods, QueryDsl, RunQueryDsl};
 
 use notifications::*;
 use plume_common::activity_pub::{
-    inbox::{AsObject, FromId},
+    inbox::{AsActor, AsObject, FromId},
     Id, IntoId, PUBLIC_VISIBILITY,
 };
 use posts::Post;
 use schema::reshares;
+use timeline::*;
 use users::User;
 use {Connection, Error, PlumeRocket, Result};
 
@@ -79,14 +80,16 @@ impl Reshare {
     pub fn notify(&self, conn: &Connection) -> Result<()> {
         let post = self.get_post(conn)?;
         for author in post.get_authors(conn)? {
-            Notification::insert(
-                conn,
-                NewNotification {
-                    kind: notification_kind::RESHARE.to_string(),
-                    object_id: self.id,
-                    user_id: author.id,
-                },
-            )?;
+            if author.is_local() {
+                Notification::insert(
+                    conn,
+                    NewNotification {
+                        kind: notification_kind::RESHARE.to_string(),
+                        object_id: self.id,
+                        user_id: author.id,
+                    },
+                )?;
+            }
         }
         Ok(())
     }
@@ -122,6 +125,8 @@ impl AsObject<User, Announce, &PlumeRocket> for Post {
             },
         )?;
         reshare.notify(conn)?;
+
+        Timeline::add_to_all_timelines(c, &self, Kind::Reshare(&actor))?;
         Ok(reshare)
     }
 }
@@ -138,26 +143,12 @@ impl FromId<PlumeRocket> for Reshare {
         let res = Reshare::insert(
             &c.conn,
             NewReshare {
-                post_id: Post::from_id(
-                    c,
-                    &{
-                        let res: String = act.announce_props.object_link::<Id>()?.into();
-                        res
-                    },
-                    None,
-                )
-                .map_err(|(_, e)| e)?
-                .id,
-                user_id: User::from_id(
-                    c,
-                    &{
-                        let res: String = act.announce_props.actor_link::<Id>()?.into();
-                        res
-                    },
-                    None,
-                )
-                .map_err(|(_, e)| e)?
-                .id,
+                post_id: Post::from_id(c, &act.announce_props.object_link::<Id>()?, None)
+                    .map_err(|(_, e)| e)?
+                    .id,
+                user_id: User::from_id(c, &act.announce_props.actor_link::<Id>()?, None)
+                    .map_err(|(_, e)| e)?
+                    .id,
                 ap_url: act.object_props.id_string()?,
             },
         )?;

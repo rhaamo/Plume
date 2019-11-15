@@ -1,6 +1,11 @@
-use activitypub::{actor::Group, collection::OrderedCollection, object::Image, CustomObject};
+use activitypub::{
+    actor::Group,
+    collection::{OrderedCollection, OrderedCollectionPage},
+    object::Image,
+    CustomObject,
+};
 use chrono::NaiveDateTime;
-use diesel::{self, ExpressionMethods, QueryDsl, RunQueryDsl, SaveChangesDsl};
+use diesel::{self, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SaveChangesDsl};
 use openssl::{
     hash::MessageDigest,
     pkey::{PKey, Private},
@@ -22,7 +27,7 @@ use safe_string::SafeString;
 use schema::blogs;
 use search::Searcher;
 use users::User;
-use {Connection, Error, PlumeRocket, Result};
+use {ap_url, Connection, Error, PlumeRocket, Result, ITEMS_PER_PAGE};
 
 pub type CustomGroup = CustomObject<ApSignature, Group>;
 
@@ -44,6 +49,7 @@ pub struct Blog {
     pub summary_html: SafeString,
     pub icon_id: Option<i32>,
     pub banner_id: Option<i32>,
+    pub theme: Option<String>,
 }
 
 #[derive(Default, Insertable)]
@@ -61,6 +67,7 @@ pub struct NewBlog {
     pub summary_html: SafeString,
     pub icon_id: Option<i32>,
     pub banner_id: Option<i32>,
+    pub theme: Option<String>,
 }
 
 const BLOG_PREFIX: &str = "~";
@@ -133,10 +140,8 @@ impl Blog {
     pub fn find_by_fqn(c: &PlumeRocket, fqn: &str) -> Result<Blog> {
         let from_db = blogs::table
             .filter(blogs::fqn.eq(fqn))
-            .limit(1)
-            .load::<Blog>(&*c.conn)?
-            .into_iter()
-            .next();
+            .first(&*c.conn)
+            .optional()?;
         if let Some(from_db) = from_db {
             Ok(from_db)
         } else {
@@ -145,7 +150,7 @@ impl Blog {
     }
 
     fn fetch_from_webfinger(c: &PlumeRocket, acct: &str) -> Result<Blog> {
-        resolve(acct.to_owned(), true)?
+        resolve_with_prefix(Prefix::Group, acct.to_owned(), true)?
             .links
             .into_iter()
             .find(|l| l.mime_type == Some(String::from("application/activity+json")))
@@ -172,7 +177,7 @@ impl Blog {
         let mut icon = Image::default();
         icon.object_props.set_url_string(
             self.icon_id
-                .and_then(|id| Media::get(conn, id).and_then(|m| m.url(conn)).ok())
+                .and_then(|id| Media::get(conn, id).and_then(|m| m.url()).ok())
                 .unwrap_or_default(),
         )?;
         icon.object_props.set_attributed_to_link(
@@ -189,7 +194,7 @@ impl Blog {
         let mut banner = Image::default();
         banner.object_props.set_url_string(
             self.banner_id
-                .and_then(|id| Media::get(conn, id).and_then(|m| m.url(conn)).ok())
+                .and_then(|id| Media::get(conn, id).and_then(|m| m.url()).ok())
                 .unwrap_or_default(),
         )?;
         banner.object_props.set_attributed_to_link(
@@ -220,10 +225,47 @@ impl Blog {
         coll.collection_props.items = serde_json::to_value(self.get_activities(conn)?)?;
         coll.collection_props
             .set_total_items_u64(self.get_activities(conn)?.len() as u64)?;
+        coll.collection_props
+            .set_first_link(Id::new(ap_url(&format!("{}?page=1", &self.outbox_url))))?;
+        coll.collection_props
+            .set_last_link(Id::new(ap_url(&format!(
+                "{}?page={}",
+                &self.outbox_url,
+                (self.get_activities(conn)?.len() as u64 + ITEMS_PER_PAGE as u64 - 1) as u64
+                    / ITEMS_PER_PAGE as u64
+            ))))?;
         Ok(ActivityStream::new(coll))
     }
-
+    pub fn outbox_page(
+        &self,
+        conn: &Connection,
+        (min, max): (i32, i32),
+    ) -> Result<ActivityStream<OrderedCollectionPage>> {
+        let mut coll = OrderedCollectionPage::default();
+        let acts = self.get_activity_page(&conn, (min, max))?;
+        //This still doesn't do anything because the outbox
+        //doesn't do anything yet
+        coll.collection_page_props.set_next_link(Id::new(&format!(
+            "{}?page={}",
+            &self.outbox_url,
+            min / ITEMS_PER_PAGE + 1
+        )))?;
+        coll.collection_page_props.set_prev_link(Id::new(&format!(
+            "{}?page={}",
+            &self.outbox_url,
+            min / ITEMS_PER_PAGE - 1
+        )))?;
+        coll.collection_props.items = serde_json::to_value(acts)?;
+        Ok(ActivityStream::new(coll))
+    }
     fn get_activities(&self, _conn: &Connection) -> Result<Vec<serde_json::Value>> {
+        Ok(vec![])
+    }
+    fn get_activity_page(
+        &self,
+        _conn: &Connection,
+        (_min, _max): (i32, i32),
+    ) -> Result<Vec<serde_json::Value>> {
         Ok(vec![])
     }
 
@@ -271,14 +313,14 @@ impl Blog {
 
     pub fn icon_url(&self, conn: &Connection) -> String {
         self.icon_id
-            .and_then(|id| Media::get(conn, id).and_then(|m| m.url(conn)).ok())
-            .unwrap_or_else(|| "/static/default-avatar.png".to_string())
+            .and_then(|id| Media::get(conn, id).and_then(|m| m.url()).ok())
+            .unwrap_or_else(|| "/static/images/default-avatar.png".to_string())
     }
 
     pub fn banner_url(&self, conn: &Connection) -> Option<String> {
         self.banner_id
             .and_then(|i| Media::get(conn, i).ok())
-            .and_then(|c| c.url(conn).ok())
+            .and_then(|c| c.url().ok())
     }
 
     pub fn delete(&self, conn: &Connection, searcher: &Searcher) -> Result<()> {
@@ -332,7 +374,7 @@ impl FromId<PlumeRocket> for Blog {
             .icon_image()
             .ok()
             .and_then(|icon| {
-                let owner: String = icon.object_props.attributed_to_link::<Id>().ok()?.into();
+                let owner = icon.object_props.attributed_to_link::<Id>().ok()?;
                 Media::save_remote(
                     &c.conn,
                     icon.object_props.url_string().ok()?,
@@ -348,7 +390,7 @@ impl FromId<PlumeRocket> for Blog {
             .image_image()
             .ok()
             .and_then(|banner| {
-                let owner: String = banner.object_props.attributed_to_link::<Id>().ok()?.into();
+                let owner = banner.object_props.attributed_to_link::<Id>().ok()?;
                 Media::save_remote(
                     &c.conn,
                     banner.object_props.url_string().ok()?,
@@ -392,6 +434,7 @@ impl FromId<PlumeRocket> for Blog {
                         .summary_string()
                         .unwrap_or_default(),
                 ),
+                theme: None,
             },
         )
     }
@@ -407,7 +450,9 @@ impl AsActor<&PlumeRocket> for Blog {
     }
 
     fn is_local(&self) -> bool {
-        self.instance_id == 1 // TODO: this is not always true
+        Instance::get_local()
+            .map(|i| self.instance_id == i.id)
+            .unwrap_or(false)
     }
 }
 
@@ -474,7 +519,7 @@ pub(crate) mod tests {
                 "BlogName".to_owned(),
                 "Blog name".to_owned(),
                 "This is a small blog".to_owned(),
-                Instance::get_local(conn).unwrap().id,
+                Instance::get_local().unwrap().id,
             )
             .unwrap(),
         )
@@ -485,7 +530,7 @@ pub(crate) mod tests {
                 "MyBlog".to_owned(),
                 "My blog".to_owned(),
                 "Welcome to my blog".to_owned(),
-                Instance::get_local(conn).unwrap().id,
+                Instance::get_local().unwrap().id,
             )
             .unwrap(),
         )
@@ -496,7 +541,7 @@ pub(crate) mod tests {
                 "WhyILikePlume".to_owned(),
                 "Why I like Plume".to_owned(),
                 "In this blog I will explay you why I like Plume so much".to_owned(),
-                Instance::get_local(conn).unwrap().id,
+                Instance::get_local().unwrap().id,
             )
             .unwrap(),
         )
@@ -556,7 +601,7 @@ pub(crate) mod tests {
                     "SomeName".to_owned(),
                     "Some name".to_owned(),
                     "This is some blog".to_owned(),
-                    Instance::get_local(conn).unwrap().id,
+                    Instance::get_local().unwrap().id,
                 )
                 .unwrap(),
             )
@@ -564,12 +609,11 @@ pub(crate) mod tests {
 
             assert_eq!(
                 blog.get_instance(conn).unwrap().id,
-                Instance::get_local(conn).unwrap().id
+                Instance::get_local().unwrap().id
             );
             // TODO add tests for remote instance
-
             Ok(())
-        });
+        })
     }
 
     #[test]
@@ -584,7 +628,7 @@ pub(crate) mod tests {
                     "SomeName".to_owned(),
                     "Some name".to_owned(),
                     "This is some blog".to_owned(),
-                    Instance::get_local(conn).unwrap().id,
+                    Instance::get_local().unwrap().id,
                 )
                 .unwrap(),
             )
@@ -595,7 +639,7 @@ pub(crate) mod tests {
                     "Blog".to_owned(),
                     "Blog".to_owned(),
                     "I've named my blog Blog".to_owned(),
-                    Instance::get_local(conn).unwrap().id,
+                    Instance::get_local().unwrap().id,
                 )
                 .unwrap(),
             )
@@ -669,9 +713,8 @@ pub(crate) mod tests {
                 .unwrap()
                 .iter()
                 .any(|b| b.id == blog[1].id));
-
             Ok(())
-        });
+        })
     }
 
     #[test]
@@ -687,16 +730,15 @@ pub(crate) mod tests {
                     "SomeName".to_owned(),
                     "Some name".to_owned(),
                     "This is some blog".to_owned(),
-                    Instance::get_local(conn).unwrap().id,
+                    Instance::get_local().unwrap().id,
                 )
                 .unwrap(),
             )
             .unwrap();
 
             assert_eq!(Blog::find_by_fqn(&r, "SomeName").unwrap().id, blog.id);
-
             Ok(())
-        });
+        })
     }
 
     #[test]
@@ -711,16 +753,15 @@ pub(crate) mod tests {
                     "SomeName".to_owned(),
                     "Some name".to_owned(),
                     "This is some blog".to_owned(),
-                    Instance::get_local(conn).unwrap().id,
+                    Instance::get_local().unwrap().id,
                 )
                 .unwrap(),
             )
             .unwrap();
 
             assert_eq!(blog.fqn, "SomeName");
-
             Ok(())
-        });
+        })
     }
 
     #[test]
@@ -731,9 +772,8 @@ pub(crate) mod tests {
 
             blogs[0].delete(conn, &get_searcher()).unwrap();
             assert!(Blog::get(conn, blogs[0].id).is_err());
-
             Ok(())
-        });
+        })
     }
 
     #[test]
@@ -749,7 +789,7 @@ pub(crate) mod tests {
                     "SomeName".to_owned(),
                     "Some name".to_owned(),
                     "This is some blog".to_owned(),
-                    Instance::get_local(conn).unwrap().id,
+                    Instance::get_local().unwrap().id,
                 )
                 .unwrap(),
             )
@@ -760,7 +800,7 @@ pub(crate) mod tests {
                     "Blog".to_owned(),
                     "Blog".to_owned(),
                     "I've named my blog Blog".to_owned(),
-                    Instance::get_local(conn).unwrap().id,
+                    Instance::get_local().unwrap().id,
                 )
                 .unwrap(),
             )
@@ -802,9 +842,8 @@ pub(crate) mod tests {
             assert!(Blog::get(conn, blog[1].id).is_err());
             user[1].delete(conn, &searcher).unwrap();
             assert!(Blog::get(conn, blog[0].id).is_err());
-
             Ok(())
-        });
+        })
     }
 
     #[test]
@@ -865,6 +904,6 @@ pub(crate) mod tests {
             assert_eq!(blog.banner_url(conn), blogs[0].banner_url(conn));
 
             Ok(())
-        });
+        })
     }
 }

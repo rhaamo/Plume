@@ -62,7 +62,14 @@ impl MediaCategory {
 impl Media {
     insert!(medias, NewMedia);
     get!(medias);
-    list_by!(medias, for_user, owner_id as i32);
+
+    pub fn for_user(conn: &Connection, owner: i32) -> Result<Vec<Media>> {
+        medias::table
+            .filter(medias::owner_id.eq(owner))
+            .order(medias::id.desc())
+            .load::<Self>(conn)
+            .map_err(Error::from)
+    }
 
     pub fn list_all_medias(conn: &Connection) -> Result<Vec<Media>> {
         medias::table.load::<Media>(conn).map_err(Error::from)
@@ -75,6 +82,7 @@ impl Media {
     ) -> Result<Vec<Media>> {
         medias::table
             .filter(medias::owner_id.eq(user.id))
+            .order(medias::id.desc())
             .offset(i64::from(min))
             .limit(i64::from(max - min))
             .load::<Media>(conn)
@@ -104,8 +112,8 @@ impl Media {
         }
     }
 
-    pub fn html(&self, conn: &Connection) -> Result<SafeString> {
-        let url = self.url(conn)?;
+    pub fn html(&self) -> Result<SafeString> {
+        let url = self.url()?;
         Ok(match self.category() {
             MediaCategory::Image => SafeString::trusted(&format!(
                 r#"<img src="{}" alt="{}" title="{}">"#,
@@ -126,24 +134,26 @@ impl Media {
         })
     }
 
-    pub fn markdown(&self, conn: &Connection) -> Result<SafeString> {
+    pub fn markdown(&self) -> Result<SafeString> {
         Ok(match self.category() {
             MediaCategory::Image => {
                 SafeString::new(&format!("![{}]({})", escape(&self.alt_text), self.id))
             }
-            MediaCategory::Audio | MediaCategory::Video => self.html(conn)?,
+            MediaCategory::Audio | MediaCategory::Video => self.html()?,
             MediaCategory::Unknown => SafeString::new(""),
         })
     }
 
-    pub fn url(&self, conn: &Connection) -> Result<String> {
+    pub fn url(&self) -> Result<String> {
         if self.is_remote {
             Ok(self.remote_url.clone().unwrap_or_default())
         } else {
+            let p = Path::new(&self.file_path);
+            let filename: String = p.file_name().unwrap().to_str().unwrap().to_owned();
             Ok(ap_url(&format!(
-                "{}/{}",
-                Instance::get_local(conn)?.public_domain,
-                self.file_path
+                "{}/static/media/{}",
+                Instance::get_local()?.public_domain,
+                &filename
             )))
         }
     }
@@ -194,10 +204,11 @@ impl Media {
             .next()
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| String::from("png"));
-        let path =
-            Path::new("static")
-                .join("media")
-                .join(format!("{}.{}", GUID::rand().to_string(), ext));
+        let path = Path::new(&super::CONFIG.media_directory).join(format!(
+            "{}.{}",
+            GUID::rand().to_string(),
+            ext
+        ));
 
         let mut dest = fs::File::create(path.clone()).ok()?;
         reqwest::get(remote_url.as_str())
@@ -237,7 +248,7 @@ impl Media {
             let media = Media::get(conn, id).ok()?;
             // if owner is user or check is disabled
             if uid.contains(&media.owner_id) || uid.is_empty() {
-                Some((media.url(conn).ok()?, media.content_warning))
+                Some((media.url().ok()?, media.content_warning))
             } else {
                 None
             }
@@ -316,8 +327,6 @@ pub(crate) mod tests {
         }
     }
 
-    //set_owner
-
     #[test]
     fn delete() {
         let conn = &db();
@@ -346,13 +355,11 @@ pub(crate) mod tests {
             assert!(!Path::new(&path).exists());
 
             clean(conn);
-
             Ok(())
         });
     }
 
     #[test]
-
     fn set_owner() {
         let conn = &db();
         conn.test_transaction::<_, (), _>(|| {
@@ -396,7 +403,6 @@ pub(crate) mod tests {
                 .any(|m| m.id == media.id));
 
             clean(conn);
-
             Ok(())
         });
     }

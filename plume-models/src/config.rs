@@ -14,6 +14,8 @@ pub struct Config {
     pub search_index: String,
     pub rocket: Result<RocketConfig, RocketError>,
     pub logo: LogoConfig,
+    pub default_theme: String,
+    pub media_directory: String,
 }
 
 #[derive(Debug, Clone)]
@@ -199,5 +201,8 @@ lazy_static! {
         search_index: var("SEARCH_INDEX").unwrap_or_else(|_| "search_index".to_owned()),
         rocket: get_rocket_config(),
         logo: LogoConfig::default(),
+        default_theme: var("DEFAULT_THEME").unwrap_or_else(|_| "default-light".to_owned()),
+        media_directory: var("MEDIA_UPLOAD_DIRECTORY")
+            .unwrap_or_else(|_| "static/media".to_owned()),
     };
 }

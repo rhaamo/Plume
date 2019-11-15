@@ -1,11 +1,11 @@
 #![allow(clippy::too_many_arguments)]
-#![feature(decl_macro, proc_macro_hygiene)]
+#![feature(decl_macro, proc_macro_hygiene, try_trait)]
 
 extern crate activitypub;
 extern crate askama_escape;
 extern crate atom_syndication;
-extern crate canapi;
 extern crate chrono;
+extern crate clap;
 extern crate colored;
 extern crate ctrlc;
 extern crate diesel;
@@ -39,13 +39,15 @@ extern crate validator;
 extern crate validator_derive;
 extern crate webfinger;
 
+use clap::App;
 use diesel::r2d2::ConnectionManager;
 use plume_models::{
     db_conn::{DbPool, PragmaForeignKey},
+    instance::Instance,
+    migrations::IMPORTED_MIGRATIONS,
     search::{Searcher as UnmanagedSearcher, SearcherError},
     Connection, Error, CONFIG,
 };
-use rocket::State;
 use rocket_csrf::CsrfFairingBuilder;
 use scheduled_thread_pool::ScheduledThreadPool;
 use std::process::exit;
@@ -62,6 +64,8 @@ mod mail;
 #[macro_use]
 mod template_utils;
 mod routes;
+#[macro_use]
+extern crate shrinkwraprs;
 #[cfg(feature = "test")]
 mod test_routes;
 
@@ -69,21 +73,54 @@ include!(concat!(env!("OUT_DIR"), "/templates.rs"));
 
 compile_i18n!();
 
-type Searcher<'a> = State<'a, Arc<UnmanagedSearcher>>;
-
 /// Initializes a database pool.
 fn init_pool() -> Option<DbPool> {
-    dotenv::dotenv().ok();
+    match dotenv::dotenv() {
+        Ok(path) => println!("Configuration read from {}", path.display()),
+        Err(ref e) if e.not_found() => eprintln!("no .env was found"),
+        e => e.map(|_| ()).unwrap(),
+    }
 
     let manager = ConnectionManager::<Connection>::new(CONFIG.database_url.as_str());
-    DbPool::builder()
+    let pool = DbPool::builder()
         .connection_customizer(Box::new(PragmaForeignKey))
         .build(manager)
-        .ok()
+        .ok()?;
+    Instance::cache_local(&pool.get().unwrap());
+    Some(pool)
 }
 
 fn main() {
+    App::new("Plume")
+        .bin_name("plume")
+        .version(env!("CARGO_PKG_VERSION"))
+        .about("Plume backend server")
+        .after_help(
+            r#"
+The plume command should be run inside the directory
+containing the `.env` configuration file and `static` directory.
+See https://docs.joinplu.me/installation/config
+and https://docs.joinplu.me/installation/init for more info.
+        "#,
+        )
+        .get_matches();
     let dbpool = init_pool().expect("main: database pool initialization error");
+    if IMPORTED_MIGRATIONS
+        .is_pending(&dbpool.get().unwrap())
+        .unwrap_or(true)
+    {
+        panic!(
+            r#"
+It appear your database migration does not run the migration required
+by this version of Plume. To fix this, you can run migrations via
+this command:
+
+    plm migration run
+
+Then try to restart Plume.
+"#
+        )
+    }
     let workpool = ScheduledThreadPool::with_name("worker {}", num_cpus::get());
     // we want a fast exit here, so
     #[allow(clippy::match_wild_err_arm)]
@@ -102,8 +139,8 @@ Then try to restart Plume.
             SearcherError::IndexOpeningError => panic!(
                 r#"
 Plume was unable to open the search index. If you created the index
-before, make sure to run Plume in the same directory it was created in, or 
-to set SEARCH_INDEX accordingly. If you did not yet create the search 
+before, make sure to run Plume in the same directory it was created in, or
+to set SEARCH_INDEX accordingly. If you did not yet create the search
 index, run this command:
 
     plm search init
@@ -145,6 +182,7 @@ Then try to restart Plume
                 routes::blogs::details,
                 routes::blogs::activity_details,
                 routes::blogs::outbox,
+                routes::blogs::outbox_page,
                 routes::blogs::new,
                 routes::blogs::new_auth,
                 routes::blogs::create,
@@ -156,19 +194,18 @@ Then try to restart Plume
                 routes::comments::delete,
                 routes::comments::activity_pub,
                 routes::instance::index,
-                routes::instance::local,
-                routes::instance::feed,
-                routes::instance::federated,
                 routes::instance::admin,
+                routes::instance::admin_mod,
                 routes::instance::admin_instances,
                 routes::instance::admin_users,
-                routes::instance::ban,
+                routes::instance::edit_users,
                 routes::instance::toggle_block,
                 routes::instance::update_settings,
                 routes::instance::shared_inbox,
                 routes::instance::interact,
                 routes::instance::nodeinfo,
                 routes::instance::about,
+                routes::instance::privacy,
                 routes::instance::web_manifest,
                 routes::likes::create,
                 routes::likes::create_auth,
@@ -200,9 +237,17 @@ Then try to restart Plume
                 routes::session::password_reset_request,
                 routes::session::password_reset_form,
                 routes::session::password_reset,
+                routes::theme_files,
                 routes::plume_static_files,
                 routes::static_files,
+                routes::plume_media_files,
                 routes::tags::tag,
+                routes::timelines::details,
+                routes::timelines::new,
+                routes::timelines::create,
+                routes::timelines::edit,
+                routes::timelines::update,
+                routes::timelines::delete,
                 routes::user::me,
                 routes::user::details,
                 routes::user::dashboard,
@@ -218,6 +263,7 @@ Then try to restart Plume
                 routes::user::follow_auth,
                 routes::user::activity_details,
                 routes::user::outbox,
+                routes::user::outbox_page,
                 routes::user::inbox,
                 routes::user::ap_followers,
                 routes::user::new,
@@ -237,6 +283,7 @@ Then try to restart Plume
                 api::posts::get,
                 api::posts::list,
                 api::posts::create,
+                api::posts::delete,
             ],
         )
         .register(catchers![

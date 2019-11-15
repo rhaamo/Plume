@@ -1,13 +1,13 @@
 use chrono::NaiveDateTime;
 use diesel::{self, ExpressionMethods, QueryDsl, RunQueryDsl};
-use std::iter::Iterator;
+use std::sync::RwLock;
 
 use ap_url;
 use medias::Media;
 use plume_common::utils::md_to_html;
 use safe_string::SafeString;
 use schema::{instances, users};
-use users::User;
+use users::{Role, User};
 use {Connection, Error, Result};
 
 #[derive(Clone, Identifiable, Queryable)]
@@ -40,15 +40,32 @@ pub struct NewInstance {
     pub short_description_html: String,
 }
 
+lazy_static! {
+    static ref LOCAL_INSTANCE: RwLock<Option<Instance>> = RwLock::new(None);
+}
+
 impl Instance {
-    pub fn get_local(conn: &Connection) -> Result<Instance> {
+    pub fn set_local(self) {
+        LOCAL_INSTANCE.write().unwrap().replace(self);
+    }
+
+    pub fn get_local() -> Result<Instance> {
+        LOCAL_INSTANCE
+            .read()
+            .unwrap()
+            .clone()
+            .ok_or(Error::NotFound)
+    }
+
+    pub fn get_local_uncached(conn: &Connection) -> Result<Instance> {
         instances::table
             .filter(instances::local.eq(true))
-            .limit(1)
-            .load::<Instance>(conn)?
-            .into_iter()
-            .nth(0)
-            .ok_or(Error::NotFound)
+            .first(conn)
+            .map_err(Error::from)
+    }
+
+    pub fn cache_local(conn: &Connection) {
+        *LOCAL_INSTANCE.write().unwrap() = Instance::get_local_uncached(conn).ok();
     }
 
     pub fn get_remotes(conn: &Connection) -> Result<Vec<Instance>> {
@@ -96,7 +113,7 @@ impl Instance {
     pub fn has_admin(&self, conn: &Connection) -> Result<bool> {
         users::table
             .filter(users::instance_id.eq(self.id))
-            .filter(users::is_admin.eq(true))
+            .filter(users::role.eq(Role::Admin as i32))
             .load::<User>(conn)
             .map_err(Error::from)
             .map(|r| !r.is_empty())
@@ -105,9 +122,8 @@ impl Instance {
     pub fn main_admin(&self, conn: &Connection) -> Result<User> {
         users::table
             .filter(users::instance_id.eq(self.id))
-            .filter(users::is_admin.eq(true))
-            .limit(1)
-            .get_result::<User>(conn)
+            .filter(users::role.eq(Role::Admin as i32))
+            .first(conn)
             .map_err(Error::from)
     }
 
@@ -128,20 +144,21 @@ impl Instance {
         open_registrations: bool,
         short_description: SafeString,
         long_description: SafeString,
+        default_license: String,
     ) -> Result<()> {
         let (sd, _, _) = md_to_html(
             short_description.as_ref(),
-            &self.public_domain,
+            Some(&self.public_domain),
             true,
             Some(Media::get_media_processor(conn, vec![])),
         );
         let (ld, _, _) = md_to_html(
             long_description.as_ref(),
-            &self.public_domain,
+            Some(&self.public_domain),
             false,
             Some(Media::get_media_processor(conn, vec![])),
         );
-        diesel::update(self)
+        let res = diesel::update(self)
             .set((
                 instances::name.eq(name),
                 instances::open_registrations.eq(open_registrations),
@@ -149,16 +166,75 @@ impl Instance {
                 instances::long_description.eq(long_description),
                 instances::short_description_html.eq(sd),
                 instances::long_description_html.eq(ld),
+                instances::default_license.eq(default_license),
             ))
             .execute(conn)
             .map(|_| ())
-            .map_err(Error::from)
+            .map_err(Error::from);
+        if self.local {
+            Instance::cache_local(conn);
+        }
+        res
     }
 
     pub fn count(conn: &Connection) -> Result<i64> {
         instances::table
             .count()
             .get_result(conn)
+            .map_err(Error::from)
+    }
+
+    /// Returns a list of the local instance themes (all files matching `static/css/NAME/theme.css`)
+    ///
+    /// The list only contains the name of the themes, without their extension or full path.
+    pub fn list_themes() -> Result<Vec<String>> {
+        // List all the files in static/css
+        std::path::Path::new("static")
+            .join("css")
+            .read_dir()
+            .map(|files| {
+                files
+                    .filter_map(std::result::Result::ok)
+                    // Only keep actual directories (each theme has its own dir)
+                    .filter(|f| f.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                    // Only keep the directory name (= theme name)
+                    .filter_map(|f| {
+                        f.path()
+                            .file_name()
+                            .and_then(std::ffi::OsStr::to_str)
+                            .map(std::borrow::ToOwned::to_owned)
+                    })
+                    // Ignore the one starting with "blog-": these are the blog themes
+                    .filter(|f| !f.starts_with("blog-"))
+                    .collect()
+            })
+            .map_err(Error::from)
+    }
+
+    /// Returns a list of the local blog themes (all files matching `static/css/blog-NAME/theme.css`)
+    ///
+    /// The list only contains the name of the themes, without their extension or full path.
+    pub fn list_blog_themes() -> Result<Vec<String>> {
+        // List all the files in static/css
+        std::path::Path::new("static")
+            .join("css")
+            .read_dir()
+            .map(|files| {
+                files
+                    .filter_map(std::result::Result::ok)
+                    // Only keep actual directories (each theme has its own dir)
+                    .filter(|f| f.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                    // Only keep the directory name (= theme name)
+                    .filter_map(|f| {
+                        f.path()
+                            .file_name()
+                            .and_then(std::ffi::OsStr::to_str)
+                            .map(std::borrow::ToOwned::to_owned)
+                    })
+                    // Only keep the one starting with "blog-": these are the blog themes
+                    .filter(|f| f.starts_with("blog-"))
+                    .collect()
+            })
             .map_err(Error::from)
     }
 }
@@ -171,7 +247,7 @@ pub(crate) mod tests {
     use Connection as Conn;
 
     pub(crate) fn fill_database(conn: &Conn) -> Vec<(NewInstance, Instance)> {
-        vec![
+        let res = vec![
             NewInstance {
                 default_license: "WTFPL".to_string(),
                 local: true,
@@ -225,7 +301,9 @@ pub(crate) mod tests {
                     .unwrap_or_else(|_| Instance::insert(conn, inst).unwrap()),
             )
         })
-        .collect()
+        .collect();
+        Instance::cache_local(conn);
+        res
     }
 
     #[test]
@@ -237,7 +315,7 @@ pub(crate) mod tests {
                 .map(|(inserted, _)| inserted)
                 .find(|inst| inst.local)
                 .unwrap();
-            let res = Instance::get_local(conn).unwrap();
+            let res = Instance::get_local().unwrap();
 
             part_eq!(
                 res,
@@ -260,7 +338,6 @@ pub(crate) mod tests {
                 res.short_description_html.get(),
                 &inserted.short_description_html
             );
-
             Ok(())
         });
     }
@@ -321,7 +398,6 @@ pub(crate) mod tests {
                 assert!(last_domaine <= page[0].public_domain);
                 last_domaine = page[0].public_domain.clone();
             }
-
             Ok(())
         });
     }
@@ -384,7 +460,6 @@ pub(crate) mod tests {
                     .count(),
                 0
             );
-
             Ok(())
         });
     }
@@ -401,6 +476,7 @@ pub(crate) mod tests {
                 false,
                 SafeString::new("[short](#link)"),
                 SafeString::new("[long_description](/with_link)"),
+                "CC-BY-SAO".to_owned(),
             )
             .unwrap();
             let inst = Instance::get(conn, inst.id).unwrap();
@@ -419,7 +495,7 @@ pub(crate) mod tests {
                 inst.short_description_html,
                 SafeString::new("<p><a href=\"#link\">short</a></p>\n")
             );
-
+            assert_eq!(inst.default_license, "CC-BY-SAO".to_owned());
             Ok(())
         });
     }

@@ -4,7 +4,6 @@ use activitypub::{
     object::{Article, Image, Tombstone},
     CustomObject,
 };
-use canapi::{Error as ApiError, Provider};
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use diesel::{self, BelongingToDsl, ExpressionMethods, QueryDsl, RunQueryDsl, SaveChangesDsl};
 use heck::{CamelCase, KebabCase};
@@ -15,10 +14,8 @@ use blogs::Blog;
 use instance::Instance;
 use medias::Media;
 use mentions::Mention;
-use plume_api::posts::PostEndpoint;
 use plume_common::{
     activity_pub::{
-        broadcast,
         inbox::{AsObject, FromId},
         Hashtag, Id, IntoId, Licensed, Source, PUBLIC_VISIBILITY,
     },
@@ -29,8 +26,9 @@ use safe_string::SafeString;
 use schema::posts;
 use search::Searcher;
 use tags::*;
+use timeline::*;
 use users::User;
-use {ap_url, ApiResult, Connection, Error, PlumeRocket, Result, CONFIG};
+use {ap_url, Connection, Error, PlumeRocket, Result, CONFIG};
 
 pub type LicensedArticle = CustomObject<Licensed, Article>;
 
@@ -65,282 +63,6 @@ pub struct NewPost {
     pub subtitle: String,
     pub source: String,
     pub cover_id: Option<i32>,
-}
-
-impl Provider<PlumeRocket> for Post {
-    type Data = PostEndpoint;
-
-    fn get(rockets: &PlumeRocket, id: i32) -> ApiResult<PostEndpoint> {
-        let conn = &*rockets.conn;
-        if let Ok(post) = Post::get(conn, id) {
-            if !post.published
-                && !rockets
-                    .user
-                    .as_ref()
-                    .and_then(|u| post.is_author(conn, u.id).ok())
-                    .unwrap_or(false)
-            {
-                return Err(ApiError::Authorization(
-                    "You are not authorized to access this post yet.".to_string(),
-                ));
-            }
-            Ok(PostEndpoint {
-                id: Some(post.id),
-                title: Some(post.title.clone()),
-                subtitle: Some(post.subtitle.clone()),
-                content: Some(post.content.get().clone()),
-                source: Some(post.source.clone()),
-                author: Some(
-                    post.get_authors(conn)
-                        .map_err(|_| ApiError::NotFound("Authors not found".into()))?[0]
-                        .username
-                        .clone(),
-                ),
-                blog_id: Some(post.blog_id),
-                published: Some(post.published),
-                creation_date: Some(post.creation_date.format("%Y-%m-%d").to_string()),
-                license: Some(post.license.clone()),
-                tags: Some(
-                    Tag::for_post(conn, post.id)
-                        .map_err(|_| ApiError::NotFound("Tags not found".into()))?
-                        .into_iter()
-                        .map(|t| t.tag)
-                        .collect(),
-                ),
-                cover_id: post.cover_id,
-            })
-        } else {
-            Err(ApiError::NotFound("Request post was not found".to_string()))
-        }
-    }
-
-    fn list(rockets: &PlumeRocket, filter: PostEndpoint) -> Vec<PostEndpoint> {
-        let conn = &*rockets.conn;
-        let mut query = posts::table.into_boxed();
-        if let Some(title) = filter.title {
-            query = query.filter(posts::title.eq(title));
-        }
-        if let Some(subtitle) = filter.subtitle {
-            query = query.filter(posts::subtitle.eq(subtitle));
-        }
-        if let Some(content) = filter.content {
-            query = query.filter(posts::content.eq(content));
-        }
-
-        query
-            .get_results::<Post>(conn)
-            .map(|ps| {
-                ps.into_iter()
-                    .filter(|p| {
-                        p.published
-                            || rockets
-                                .user
-                                .as_ref()
-                                .and_then(|u| p.is_author(conn, u.id).ok())
-                                .unwrap_or(false)
-                    })
-                    .map(|p| PostEndpoint {
-                        id: Some(p.id),
-                        title: Some(p.title.clone()),
-                        subtitle: Some(p.subtitle.clone()),
-                        content: Some(p.content.get().clone()),
-                        source: Some(p.source.clone()),
-                        author: Some(p.get_authors(conn).unwrap_or_default()[0].username.clone()),
-                        blog_id: Some(p.blog_id),
-                        published: Some(p.published),
-                        creation_date: Some(p.creation_date.format("%Y-%m-%d").to_string()),
-                        license: Some(p.license.clone()),
-                        tags: Some(
-                            Tag::for_post(conn, p.id)
-                                .unwrap_or_else(|_| vec![])
-                                .into_iter()
-                                .map(|t| t.tag)
-                                .collect(),
-                        ),
-                        cover_id: p.cover_id,
-                    })
-                    .collect()
-            })
-            .unwrap_or_else(|_| vec![])
-    }
-
-    fn update(
-        _rockets: &PlumeRocket,
-        _id: i32,
-        _new_data: PostEndpoint,
-    ) -> ApiResult<PostEndpoint> {
-        unimplemented!()
-    }
-
-    fn delete(rockets: &PlumeRocket, id: i32) {
-        let conn = &*rockets.conn;
-        let user_id = rockets
-            .user
-            .as_ref()
-            .expect("Post as Provider::delete: not authenticated")
-            .id;
-        if let Ok(post) = Post::get(conn, id) {
-            if post.is_author(conn, user_id).unwrap_or(false) {
-                post.delete(conn, &rockets.searcher)
-                    .expect("Post as Provider::delete: delete error");
-            }
-        }
-    }
-
-    fn create(rockets: &PlumeRocket, query: PostEndpoint) -> ApiResult<PostEndpoint> {
-        let conn = &*rockets.conn;
-        let search = &rockets.searcher;
-        let worker = &rockets.worker;
-        if rockets.user.is_none() {
-            return Err(ApiError::Authorization(
-                "You are not authorized to create new articles.".to_string(),
-            ));
-        }
-
-        let title = query.title.clone().expect("No title for new post in API");
-        let slug = query.title.unwrap().to_kebab_case();
-
-        let date = query.creation_date.clone().and_then(|d| {
-            NaiveDateTime::parse_from_str(format!("{} 00:00:00", d).as_ref(), "%Y-%m-%d %H:%M:%S")
-                .ok()
-        });
-
-        let domain = &Instance::get_local(&conn)
-            .map_err(|_| ApiError::NotFound("posts::update: Error getting local instance".into()))?
-            .public_domain;
-        let author = rockets
-            .user
-            .clone()
-            .ok_or_else(|| ApiError::NotFound("Author not found".into()))?;
-
-        let (content, mentions, hashtags) = md_to_html(
-            query.source.clone().unwrap_or_default().clone().as_ref(),
-            domain,
-            false,
-            Some(Media::get_media_processor(conn, vec![&author])),
-        );
-
-        let blog = match query.blog_id {
-            Some(x) => x,
-            None => {
-                Blog::find_for_author(conn, &author)
-                    .map_err(|_| ApiError::NotFound("No default blog".into()))?[0]
-                    .id
-            }
-        };
-
-        if Post::find_by_slug(conn, &slug, blog).is_ok() {
-            // Not an actual authorization problem, but we have nothing better for now…
-            // TODO: add another error variant to canapi and add it there
-            return Err(ApiError::Authorization(
-                "A post with the same slug already exists".to_string(),
-            ));
-        }
-
-        let post = Post::insert(
-            conn,
-            NewPost {
-                blog_id: blog,
-                slug,
-                title,
-                content: SafeString::new(content.as_ref()),
-                published: query.published.unwrap_or(true),
-                license: query.license.unwrap_or_else(|| {
-                    Instance::get_local(conn)
-                        .map(|i| i.default_license)
-                        .unwrap_or_else(|_| String::from("CC-BY-SA"))
-                }),
-                creation_date: date,
-                ap_url: String::new(),
-                subtitle: query.subtitle.unwrap_or_default(),
-                source: query.source.expect("Post API::create: no source error"),
-                cover_id: query.cover_id,
-            },
-            search,
-        )
-        .map_err(|_| ApiError::NotFound("Creation error".into()))?;
-
-        PostAuthor::insert(
-            conn,
-            NewPostAuthor {
-                author_id: author.id,
-                post_id: post.id,
-            },
-        )
-        .map_err(|_| ApiError::NotFound("Error saving authors".into()))?;
-
-        if let Some(tags) = query.tags {
-            for tag in tags {
-                Tag::insert(
-                    conn,
-                    NewTag {
-                        tag,
-                        is_hashtag: false,
-                        post_id: post.id,
-                    },
-                )
-                .map_err(|_| ApiError::NotFound("Error saving tags".into()))?;
-            }
-        }
-        for hashtag in hashtags {
-            Tag::insert(
-                conn,
-                NewTag {
-                    tag: hashtag.to_camel_case(),
-                    is_hashtag: true,
-                    post_id: post.id,
-                },
-            )
-            .map_err(|_| ApiError::NotFound("Error saving hashtags".into()))?;
-        }
-
-        if post.published {
-            for m in mentions.into_iter() {
-                Mention::from_activity(
-                    &*conn,
-                    &Mention::build_activity(&rockets, &m)
-                        .map_err(|_| ApiError::NotFound("Couldn't build mentions".into()))?,
-                    post.id,
-                    true,
-                    true,
-                )
-                .map_err(|_| ApiError::NotFound("Error saving mentions".into()))?;
-            }
-
-            let act = post
-                .create_activity(&*conn)
-                .map_err(|_| ApiError::NotFound("Couldn't create activity".into()))?;
-            let dest = User::one_by_instance(&*conn)
-                .map_err(|_| ApiError::NotFound("Couldn't list remote instances".into()))?;
-            worker.execute(move || broadcast(&author, act, dest));
-        }
-
-        Ok(PostEndpoint {
-            id: Some(post.id),
-            title: Some(post.title.clone()),
-            subtitle: Some(post.subtitle.clone()),
-            content: Some(post.content.get().clone()),
-            source: Some(post.source.clone()),
-            author: Some(
-                post.get_authors(conn)
-                    .map_err(|_| ApiError::NotFound("No authors".into()))?[0]
-                    .username
-                    .clone(),
-            ),
-            blog_id: Some(post.blog_id),
-            published: Some(post.published),
-            creation_date: Some(post.creation_date.format("%Y-%m-%d").to_string()),
-            license: Some(post.license.clone()),
-            tags: Some(
-                Tag::for_post(conn, post.id)
-                    .map_err(|_| ApiError::NotFound("Tags not found".into()))?
-                    .into_iter()
-                    .map(|t| t.tag)
-                    .collect(),
-            ),
-            cover_id: post.cover_id,
-        })
-    }
 }
 
 impl Post {
@@ -420,7 +142,7 @@ impl Post {
         use schema::post_authors;
         use schema::users;
         let local_authors = users::table
-            .filter(users::instance_id.eq(Instance::get_local(conn)?.id))
+            .filter(users::instance_id.eq(Instance::get_local()?.id))
             .select(users::id);
         let local_posts_id = post_authors::table
             .filter(post_authors::author_id.eq_any(local_authors))
@@ -441,13 +163,24 @@ impl Post {
             .map_err(Error::from)
     }
 
-    pub fn get_recents(conn: &Connection, limit: i64) -> Result<Vec<Post>> {
-        posts::table
-            .order(posts::creation_date.desc())
-            .filter(posts::published.eq(true))
-            .limit(limit)
-            .load::<Post>(conn)
-            .map_err(Error::from)
+    pub fn list_filtered(
+        conn: &Connection,
+        title: Option<String>,
+        subtitle: Option<String>,
+        content: Option<String>,
+    ) -> Result<Vec<Post>> {
+        let mut query = posts::table.into_boxed();
+        if let Some(title) = title {
+            query = query.filter(posts::title.eq(title));
+        }
+        if let Some(subtitle) = subtitle {
+            query = query.filter(posts::subtitle.eq(subtitle));
+        }
+        if let Some(content) = content {
+            query = query.filter(posts::content.eq(content));
+        }
+
+        query.get_results::<Post>(conn).map_err(Error::from)
     }
 
     pub fn get_recents_for_author(
@@ -505,60 +238,6 @@ impl Post {
             .map_err(Error::from)
     }
 
-    /// Give a page of all the recent posts known to this instance (= federated timeline)
-    pub fn get_recents_page(conn: &Connection, (min, max): (i32, i32)) -> Result<Vec<Post>> {
-        posts::table
-            .order(posts::creation_date.desc())
-            .filter(posts::published.eq(true))
-            .offset(min.into())
-            .limit((max - min).into())
-            .load::<Post>(conn)
-            .map_err(Error::from)
-    }
-
-    /// Give a page of posts from a specific instance
-    pub fn get_instance_page(
-        conn: &Connection,
-        instance_id: i32,
-        (min, max): (i32, i32),
-    ) -> Result<Vec<Post>> {
-        use schema::blogs;
-
-        let blog_ids = blogs::table
-            .filter(blogs::instance_id.eq(instance_id))
-            .select(blogs::id);
-
-        posts::table
-            .order(posts::creation_date.desc())
-            .filter(posts::published.eq(true))
-            .filter(posts::blog_id.eq_any(blog_ids))
-            .offset(min.into())
-            .limit((max - min).into())
-            .load::<Post>(conn)
-            .map_err(Error::from)
-    }
-
-    /// Give a page of customized user feed, based on a list of followed users
-    pub fn user_feed_page(
-        conn: &Connection,
-        followed: Vec<i32>,
-        (min, max): (i32, i32),
-    ) -> Result<Vec<Post>> {
-        use schema::post_authors;
-        let post_ids = post_authors::table
-            .filter(post_authors::author_id.eq_any(followed))
-            .select(post_authors::post_id);
-
-        posts::table
-            .order(posts::creation_date.desc())
-            .filter(posts::published.eq(true))
-            .filter(posts::id.eq_any(post_ids))
-            .offset(min.into())
-            .limit((max - min).into())
-            .load::<Post>(conn)
-            .map_err(Error::from)
-    }
-
     pub fn drafts_by_author(conn: &Connection, author: &User) -> Result<Vec<Post>> {
         use schema::post_authors;
 
@@ -594,11 +273,8 @@ impl Post {
         use schema::blogs;
         blogs::table
             .filter(blogs::id.eq(self.blog_id))
-            .limit(1)
-            .load::<Blog>(conn)?
-            .into_iter()
-            .nth(0)
-            .ok_or(Error::NotFound)
+            .first(conn)
+            .map_err(Error::from)
     }
 
     pub fn count_likes(&self, conn: &Connection) -> Result<i64> {
@@ -643,7 +319,7 @@ impl Post {
             .collect::<Vec<serde_json::Value>>();
         let mut tags_json = Tag::for_post(conn, self.id)?
             .into_iter()
-            .map(|t| json!(t.to_activity(conn).ok()))
+            .map(|t| json!(t.to_activity().ok()))
             .collect::<Vec<serde_json::Value>>();
         mentions_json.append(&mut tags_json);
 
@@ -678,7 +354,7 @@ impl Post {
         if let Some(media_id) = self.cover_id {
             let media = Media::get(conn, media_id)?;
             let mut cover = Image::default();
-            cover.object_props.set_url_string(media.url(conn)?)?;
+            cover.object_props.set_url_string(media.url()?)?;
             if media.sensitive {
                 cover
                     .object_props
@@ -862,7 +538,7 @@ impl Post {
     pub fn cover_url(&self, conn: &Connection) -> Option<String> {
         self.cover_id
             .and_then(|i| Media::get(conn, i).ok())
-            .and_then(|c| c.url(conn).ok())
+            .and_then(|c| c.url().ok())
     }
 
     pub fn build_delete(&self, conn: &Connection) -> Result<Delete> {
@@ -901,7 +577,7 @@ impl FromId<PlumeRocket> for Post {
             .attributed_to_link_vec::<Id>()?
             .into_iter()
             .fold((None, vec![]), |(blog, mut authors), link| {
-                let url: String = link.into();
+                let url = link;
                 match User::from_id(&c, &url, None) {
                     Ok(u) => {
                         authors.push(u);
@@ -951,7 +627,7 @@ impl FromId<PlumeRocket> for Post {
         }
 
         // save mentions and tags
-        let mut hashtags = md_to_html(&post.source, "", false, None)
+        let mut hashtags = md_to_html(&post.source, None, false, None)
             .2
             .into_iter()
             .map(|s| s.to_camel_case())
@@ -976,6 +652,9 @@ impl FromId<PlumeRocket> for Post {
                     .ok();
             }
         }
+
+        Timeline::add_to_all_timelines(c, &post, Kind::Original)?;
+
         Ok(post)
     }
 }
@@ -1088,7 +767,7 @@ impl AsObject<User, Update, &PlumeRocket> for PostUpdate {
             post.license = license;
         }
 
-        let mut txt_hashtags = md_to_html(&post.source, "", false, None)
+        let mut txt_hashtags = md_to_html(&post.source, None, false, None)
             .2
             .into_iter()
             .map(|s| s.to_camel_case())
@@ -1187,7 +866,6 @@ mod tests {
                 }
                 _ => panic!("Unexpected result"),
             };
-
             Ok(())
         });
     }
