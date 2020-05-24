@@ -64,7 +64,7 @@ main header.article {
 }
 
 main .article-info {
- 	margin: 0 auto 3em;
+ 	margin: 0 auto 0em;
  	font-size: 0.95em;
  	font-weight: 400;
 
@@ -76,7 +76,7 @@ main .article-info {
 /* The article itself */
 main article {
   max-width: $article-width;
- 	margin: 2.5em auto;
+ 	margin: 0em auto;
  	font-family: $lora;
  	font-size: 1.2em;
  	line-height: 1.7;
