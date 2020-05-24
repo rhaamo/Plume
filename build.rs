@@ -1,8 +1,8 @@
-extern crate rsass;
-extern crate ructe;
+use rsass;
+
 use ructe::Ructe;
 use std::process::{Command, Stdio};
-use std::{env, ffi::OsStr, fs::*, io::Write, path::*};
+use std::{ffi::OsStr, fs::*, io::Write, path::*};
 
 fn compute_static_hash() -> String {
     //"find static/ -type f ! -path 'static/media/*' | sort | xargs stat -c'%n %Y' | openssl dgst -r"

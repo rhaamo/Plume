@@ -1,7 +1,7 @@
 @use plume_models::users::User;
-@use templates::base;
-@use template_utils::*;
-@use routes::*;
+@use crate::templates::base;
+@use crate::template_utils::*;
+@use crate::routes::*;
 
 @(ctx: BaseContext, users: Vec<User>, page: i32, n_pages: i32)
 
@@ -12,6 +12,7 @@
         (&uri!(instance::admin).to_string(), i18n!(ctx.1, "Configuration"), false),
         (&uri!(instance::admin_instances: page = _).to_string(), i18n!(ctx.1, "Instances"), false),
         (&uri!(instance::admin_users: page = _).to_string(), i18n!(ctx.1, "Users"), true),
+        (&uri!(instance::admin_email_blocklist: page=_).to_string(), i18n!(ctx.1, "Email blocklist"), false)
     ])
 
     <form method="post" action="@uri!(instance::edit_users)">

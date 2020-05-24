@@ -1,7 +1,8 @@
 [package]
 name = "plume-common"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Plume contributors"]
+edition = "2018"
 
 [dependencies]
 activitypub = "0.1.1"
@@ -19,7 +20,9 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 shrinkwraprs = "0.2.1"
+syntect = "3.3"
 tokio = "0.1.22"
+regex-syntax = { version = "0.6.17", default-features = false, features = ["unicode-perl"] }
 
 [dependencies.chrono]
 features = ["serde"]

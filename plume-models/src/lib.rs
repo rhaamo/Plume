@@ -1,41 +1,21 @@
 #![feature(try_trait)]
 #![feature(never_type)]
-#![feature(custom_attribute)]
 #![feature(proc_macro_hygiene)]
 
-extern crate activitypub;
-extern crate ammonia;
-extern crate askama_escape;
-extern crate bcrypt;
-extern crate chrono;
 #[macro_use]
 extern crate diesel;
-extern crate guid_create;
-extern crate heck;
-extern crate itertools;
 #[macro_use]
 extern crate lazy_static;
-extern crate migrations_internals;
-extern crate openssl;
-extern crate plume_api;
-extern crate plume_common;
 #[macro_use]
 extern crate plume_macro;
-extern crate reqwest;
+#[macro_use]
 extern crate rocket;
-extern crate rocket_i18n;
-extern crate scheduled_thread_pool;
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 #[macro_use]
 extern crate tantivy;
-extern crate url;
-extern crate walkdir;
-extern crate webfinger;
-extern crate whatlang;
 
 use plume_common::activity_pub::inbox::InboxError;
 
@@ -53,6 +33,7 @@ pub type Connection = diesel::PgConnection;
 /// All the possible errors that can be encoutered in this crate
 #[derive(Debug)]
 pub enum Error {
+    Blocklisted(bool, String),
     Db(diesel::result::Error),
     Inbox(Box<InboxError<Error>>),
     InvalidValue,
@@ -247,12 +228,13 @@ macro_rules! get {
 /// Model::insert(connection, NewModelType::new());
 /// ```
 macro_rules! insert {
-    ($table:ident, $from:ident) => {
+    ($table:ident, $from:ty) => {
         insert!($table, $from, |x, _conn| Ok(x));
     };
-    ($table:ident, $from:ident, |$val:ident, $conn:ident | $( $after:tt )+) => {
+    ($table:ident, $from:ty, |$val:ident, $conn:ident | $( $after:tt )+) => {
         last!($table);
 
+        #[allow(dead_code)]
         pub fn insert(conn: &crate::Connection, new: $from) -> Result<Self> {
             diesel::insert_into($table::table)
                 .values(new)
@@ -279,6 +261,7 @@ macro_rules! insert {
 /// ```
 macro_rules! last {
     ($table:ident) => {
+        #[allow(dead_code)]
         pub fn last(conn: &crate::Connection) -> Result<Self> {
             $table::table
                 .order_by($table::id.desc())
@@ -298,16 +281,12 @@ pub fn ap_url(url: &str) -> String {
 #[cfg(test)]
 #[macro_use]
 mod tests {
-    use db_conn;
+    use crate::{db_conn, migrations::IMPORTED_MIGRATIONS, search, Connection as Conn, CONFIG};
     use diesel::r2d2::ConnectionManager;
-    use migrations::IMPORTED_MIGRATIONS;
     use plume_common::utils::random_hex;
     use scheduled_thread_pool::ScheduledThreadPool;
-    use search;
     use std::env::temp_dir;
     use std::sync::Arc;
-    use Connection as Conn;
-    use CONFIG;
 
     #[macro_export]
     macro_rules! part_eq {
@@ -351,6 +330,7 @@ mod tests {
 pub mod admin;
 pub mod api_tokens;
 pub mod apps;
+pub mod blocklisted_emails;
 pub mod blog_authors;
 pub mod blogs;
 pub mod comment_seers;

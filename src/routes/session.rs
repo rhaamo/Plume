@@ -1,13 +1,13 @@
+use crate::routes::RespondOrRedirect;
 use lettre::Transport;
 use rocket::http::ext::IntoOwned;
 use rocket::{
     http::{uri::Uri, Cookie, Cookies, SameSite},
-    request::{Form, LenientForm},
+    request::LenientForm,
     response::{Flash, Redirect},
     State,
 };
 use rocket_i18n::I18n;
-use routes::RespondOrRedirect;
 use std::{
     borrow::Cow,
     sync::{Arc, Mutex},
@@ -15,13 +15,13 @@ use std::{
 };
 use validator::{Validate, ValidationError, ValidationErrors};
 
-use mail::{build_mail, Mailer};
+use crate::mail::{build_mail, Mailer};
+use crate::template_utils::{IntoContext, Ructe};
 use plume_models::{
     password_reset_requests::*,
     users::{User, AUTH_COOKIE},
     Error, PlumeRocket, CONFIG,
 };
-use template_utils::{IntoContext, Ructe};
 
 #[get("/login?<m>")]
 pub fn new(m: Option<String>, rockets: PlumeRocket) -> Ructe {
@@ -44,7 +44,7 @@ pub struct LoginForm {
 #[post("/login", data = "<form>")]
 pub fn create(
     form: LenientForm<LoginForm>,
-    mut cookies: Cookies,
+    mut cookies: Cookies<'_>,
     rockets: PlumeRocket,
 ) -> RespondOrRedirect {
     let conn = &*rockets.conn;
@@ -118,7 +118,7 @@ pub fn create(
 }
 
 #[get("/logout")]
-pub fn delete(mut cookies: Cookies, intl: I18n) -> Flash<Redirect> {
+pub fn delete(mut cookies: Cookies<'_>, intl: I18n) -> Flash<Redirect> {
     if let Some(cookie) = cookies.get_private(AUTH_COOKIE) {
         cookies.remove_private(cookie);
     }
@@ -158,8 +158,8 @@ pub struct ResetForm {
 
 #[post("/password-reset", data = "<form>")]
 pub fn password_reset_request(
-    mail: State<Arc<Mutex<Mailer>>>,
-    form: Form<ResetForm>,
+    mail: State<'_, Arc<Mutex<Mailer>>>,
+    form: LenientForm<ResetForm>,
     rockets: PlumeRocket,
 ) -> Ructe {
     if User::find_by_email(&*rockets.conn, &form.email).is_ok() {
@@ -216,7 +216,7 @@ fn passwords_match(form: &NewPasswordForm) -> Result<(), ValidationError> {
 #[post("/password-reset/<token>", data = "<form>")]
 pub fn password_reset(
     token: String,
-    form: Form<NewPasswordForm>,
+    form: LenientForm<NewPasswordForm>,
     rockets: PlumeRocket,
 ) -> Result<Flash<Redirect>, Ructe> {
     form.validate()

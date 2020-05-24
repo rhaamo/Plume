@@ -1,8 +1,8 @@
-@use templates::base;
-@use routes::session::LoginForm;
-@use routes::RemoteForm;
-@use template_utils::*;
 @use validator::ValidationErrors;
+@use crate::templates::base;
+@use crate::template_utils::*;
+@use crate::routes::session::LoginForm;
+@use crate::routes::RemoteForm;
 
 @(ctx: BaseContext, title: String, login_msg: String, remote_msg: String, header: Content, login_form: LoginForm, login_errs: ValidationErrors, remote_form: RemoteForm, remote_errs: ValidationErrors)
 
@@ -25,6 +25,7 @@
 	    			.default(login_form.password)
 	    			.error(&login_errs)
 	    			.set_prop("minlength", 1)
+				    .input_type("password")
 	    			.html(ctx.1))
 		        <input type="submit" value="@i18n!(ctx.1, "Log in")" />
 	    	</form>

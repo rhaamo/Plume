@@ -1,3 +1,9 @@
+use crate::{
+    ap_url, blocklisted_emails::BlocklistedEmail, blogs::Blog, db_conn::DbConn, follows::Follow,
+    instance::*, medias::Media, notifications::Notification, post_authors::PostAuthor, posts::Post,
+    safe_string::SafeString, schema::users, search::Searcher, timeline::Timeline, Connection,
+    Error, PlumeRocket, Result, ITEMS_PER_PAGE,
+};
 use activitypub::{
     activity::Delete,
     actor::Person,
@@ -14,13 +20,15 @@ use openssl::{
     rsa::Rsa,
     sign,
 };
-use plume_common::activity_pub::{
-    ap_accept_header,
-    inbox::{AsActor, AsObject, FromId},
-    sign::{gen_keypair, Signer},
-    ActivityStream, ApSignature, Id, IntoId, PublicKey, PUBLIC_VISIBILITY,
+use plume_common::{
+    activity_pub::{
+        ap_accept_header,
+        inbox::{AsActor, AsObject, FromId},
+        sign::{gen_keypair, Signer},
+        ActivityStream, ApSignature, Id, IntoId, PublicKey, PUBLIC_VISIBILITY,
+    },
+    utils,
 };
-use plume_common::utils;
 use reqwest::{
     header::{HeaderValue, ACCEPT},
     ClientBuilder,
@@ -37,20 +45,6 @@ use std::{
 use url::Url;
 use webfinger::*;
 
-use blogs::Blog;
-use db_conn::DbConn;
-use follows::Follow;
-use instance::*;
-use medias::Media;
-use notifications::Notification;
-use post_authors::PostAuthor;
-use posts::Post;
-use safe_string::SafeString;
-use schema::users;
-use search::Searcher;
-use timeline::Timeline;
-use {ap_url, Connection, Error, PlumeRocket, Result, ITEMS_PER_PAGE};
-
 pub type CustomPerson = CustomObject<ApSignature, Person>;
 
 pub enum Role {
@@ -60,6 +54,7 @@ pub enum Role {
 }
 
 #[derive(Queryable, Identifiable, Clone, Debug, AsChangeset)]
+#[changeset_options(treat_none_as_null = "true")]
 pub struct User {
     pub id: i32,
     pub username: String,
@@ -136,7 +131,7 @@ impl User {
     }
 
     pub fn delete(&self, conn: &Connection, searcher: &Searcher) -> Result<()> {
-        use schema::post_authors;
+        use crate::schema::post_authors;
 
         for blog in Blog::find_for_author(conn, self)?
             .iter()
@@ -461,8 +456,8 @@ impl User {
             .collect::<Vec<String>>())
     }
     fn get_activities_count(&self, conn: &Connection) -> i64 {
-        use schema::post_authors;
-        use schema::posts;
+        use crate::schema::post_authors;
+        use crate::schema::posts;
         let posts_by_self = PostAuthor::belonging_to(self).select(post_authors::post_id);
         posts::table
             .filter(posts::published.eq(true))
@@ -476,8 +471,8 @@ impl User {
         conn: &Connection,
         (min, max): (i32, i32),
     ) -> Result<Vec<serde_json::Value>> {
-        use schema::post_authors;
-        use schema::posts;
+        use crate::schema::post_authors;
+        use crate::schema::posts;
         let posts_by_self = PostAuthor::belonging_to(self).select(post_authors::post_id);
         let posts = posts::table
             .filter(posts::published.eq(true))
@@ -497,7 +492,7 @@ impl User {
     }
 
     pub fn get_followers(&self, conn: &Connection) -> Result<Vec<User>> {
-        use schema::follows;
+        use crate::schema::follows;
         let follows = Follow::belonging_to(self).select(follows::follower_id);
         users::table
             .filter(users::id.eq_any(follows))
@@ -506,7 +501,7 @@ impl User {
     }
 
     pub fn count_followers(&self, conn: &Connection) -> Result<i64> {
-        use schema::follows;
+        use crate::schema::follows;
         let follows = Follow::belonging_to(self).select(follows::follower_id);
         users::table
             .filter(users::id.eq_any(follows))
@@ -520,7 +515,7 @@ impl User {
         conn: &Connection,
         (min, max): (i32, i32),
     ) -> Result<Vec<User>> {
-        use schema::follows;
+        use crate::schema::follows;
         let follows = Follow::belonging_to(self).select(follows::follower_id);
         users::table
             .filter(users::id.eq_any(follows))
@@ -531,7 +526,7 @@ impl User {
     }
 
     pub fn get_followed(&self, conn: &Connection) -> Result<Vec<User>> {
-        use schema::follows::dsl::*;
+        use crate::schema::follows::dsl::*;
         let f = follows.filter(follower_id.eq(self.id)).select(following_id);
         users::table
             .filter(users::id.eq_any(f))
@@ -540,7 +535,7 @@ impl User {
     }
 
     pub fn count_followed(&self, conn: &Connection) -> Result<i64> {
-        use schema::follows;
+        use crate::schema::follows;
         follows::table
             .filter(follows::follower_id.eq(self.id))
             .count()
@@ -553,7 +548,7 @@ impl User {
         conn: &Connection,
         (min, max): (i32, i32),
     ) -> Result<Vec<User>> {
-        use schema::follows;
+        use crate::schema::follows;
         let follows = follows::table
             .filter(follows::follower_id.eq(self.id))
             .select(follows::following_id)
@@ -566,7 +561,7 @@ impl User {
     }
 
     pub fn is_followed_by(&self, conn: &Connection, other_id: i32) -> Result<bool> {
-        use schema::follows;
+        use crate::schema::follows;
         follows::table
             .filter(follows::follower_id.eq(other_id))
             .filter(follows::following_id.eq(self.id))
@@ -577,7 +572,7 @@ impl User {
     }
 
     pub fn is_following(&self, conn: &Connection, other_id: i32) -> Result<bool> {
-        use schema::follows;
+        use crate::schema::follows;
         follows::table
             .filter(follows::follower_id.eq(self.id))
             .filter(follows::following_id.eq(other_id))
@@ -588,7 +583,7 @@ impl User {
     }
 
     pub fn has_liked(&self, conn: &Connection, post: &Post) -> Result<bool> {
-        use schema::likes;
+        use crate::schema::likes;
         likes::table
             .filter(likes::post_id.eq(post.id))
             .filter(likes::user_id.eq(self.id))
@@ -599,7 +594,7 @@ impl User {
     }
 
     pub fn has_reshared(&self, conn: &Connection, post: &Post) -> Result<bool> {
-        use schema::reshares;
+        use crate::schema::reshares;
         reshares::table
             .filter(reshares::post_id.eq(post.id))
             .filter(reshares::user_id.eq(self.id))
@@ -610,7 +605,7 @@ impl User {
     }
 
     pub fn is_author_in(&self, conn: &Connection, blog: &Blog) -> Result<bool> {
-        use schema::blog_authors;
+        use crate::schema::blog_authors;
         blog_authors::table
             .filter(blog_authors::author_id.eq(self.id))
             .filter(blog_authors::blog_id.eq(blog.id))
@@ -765,7 +760,7 @@ impl User {
                     mime_type: None,
                     href: None,
                     template: Some(format!(
-                        "https://{}/remote_interact?{{uri}}",
+                        "https://{}/remote_interact?target={{uri}}",
                         self.get_instance(conn)?.public_domain
                     )),
                 },
@@ -810,7 +805,7 @@ impl<'a, 'r> FromRequest<'a, 'r> for User {
 
 impl IntoId for User {
     fn into_id(self) -> Id {
-        Id::new(self.ap_url.clone())
+        Id::new(self.ap_url)
     }
 }
 
@@ -992,6 +987,10 @@ impl NewUser {
     ) -> Result<User> {
         let (pub_key, priv_key) = gen_keypair();
         let instance = Instance::get_local()?;
+        let blocklisted = BlocklistedEmail::matches_blocklist(conn, &email)?;
+        if let Some(x) = blocklisted {
+            return Err(Error::Blocklisted(x.notify_user, x.notification_text));
+        }
 
         let res = User::insert(
             conn,
@@ -1026,11 +1025,13 @@ impl NewUser {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::{
+        instance::{tests as instance_tests, Instance},
+        search::tests::get_searcher,
+        tests::{db, rockets},
+        Connection as Conn,
+    };
     use diesel::Connection;
-    use instance::{tests as instance_tests, Instance};
-    use search::tests::get_searcher;
-    use tests::{db, rockets};
-    use Connection as Conn;
 
     pub(crate) fn fill_database(conn: &Conn) -> Vec<User> {
         instance_tests::fill_database(conn);

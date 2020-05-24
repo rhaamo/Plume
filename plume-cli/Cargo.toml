@@ -1,7 +1,8 @@
 [package]
 name = "plume-cli"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Plume contributors"]
+edition = "2018"
 
 [[bin]]
 name = "plm"

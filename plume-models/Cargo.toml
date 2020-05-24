@@ -1,7 +1,8 @@
 [package]
 name = "plume-models"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Plume contributors"]
+edition = "2018"
 
 [dependencies]
 activitypub = "0.1.1"
@@ -11,7 +12,7 @@ bcrypt = "0.5"
 guid-create = "0.1"
 heck = "0.3.0"
 itertools = "0.8.0"
-lazy_static = "*"
+lazy_static = "1.0"
 migrations_internals= "1.4.0"
 openssl = "0.10.22"
 rocket = "0.4.0"
@@ -21,13 +22,14 @@ scheduled-thread-pool = "0.2.2"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-tantivy = "0.10.1"
+tantivy = "0.12.0"
 url = "2.1"
 walkdir = "2.2"
 webfinger = "0.4.1"
 whatlang = "0.7.1"
 shrinkwraprs = "0.2.1"
 diesel-derive-newtype = "0.1.2"
+glob = "0.3.0"
 
 [dependencies.chrono]
 features = ["serde"]

@@ -10,6 +10,10 @@ use std::{
 };
 use validator::{Validate, ValidationError, ValidationErrors};
 
+use crate::routes::{
+    comments::NewCommentForm, errors::ErrorPage, ContentLen, RemoteForm, RespondOrRedirect,
+};
+use crate::template_utils::{IntoContext, Ructe};
 use plume_common::activity_pub::{broadcast, ActivityStream, ApRequest};
 use plume_common::utils;
 use plume_models::{
@@ -27,10 +31,6 @@ use plume_models::{
     users::User,
     Error, PlumeRocket,
 };
-use routes::{
-    comments::NewCommentForm, errors::ErrorPage, ContentLen, RemoteForm, RespondOrRedirect,
-};
-use template_utils::{IntoContext, Ructe};
 
 #[get("/~/<blog>/<slug>?<responding_to>", rank = 4)]
 pub fn details(
@@ -298,7 +298,7 @@ pub fn update(
             post.license = form.license.clone();
             post.cover_id = form.cover;
             post.update(&*conn, &rockets.searcher)
-                .expect("post::update: update error");;
+                .expect("post::update: update error");
 
             if post.published {
                 post.update_mentions(
@@ -308,7 +308,7 @@ pub fn update(
                         .filter_map(|m| Mention::build_activity(&rockets, &m).ok())
                         .collect(),
                 )
-                .expect("post::update: mentions error");;
+                .expect("post::update: mentions error");
             }
 
             let tags = form
@@ -367,8 +367,8 @@ pub fn update(
             &*form,
             form.draft,
             Some(post),
-            errors.clone(),
-            medias.clone(),
+            errors,
+            medias,
             cl.0
         ))
         .into()
@@ -406,7 +406,7 @@ pub fn create(
     rockets: PlumeRocket,
 ) -> Result<RespondOrRedirect, ErrorPage> {
     let conn = &*rockets.conn;
-    let blog = Blog::find_by_fqn(&rockets, &blog_name).expect("post::create: blog error");;
+    let blog = Blog::find_by_fqn(&rockets, &blog_name).expect("post::create: blog error");
     let slug = form.title.to_string().to_kebab_case();
     let user = rockets.user.clone().unwrap();
 
@@ -553,7 +553,7 @@ pub fn create(
             &*form,
             form.draft,
             None,
-            errors.clone(),
+            errors,
             medias,
             cl.0
         ))
@@ -579,9 +579,7 @@ pub fn delete(
             .any(|a| a.id == user.id)
         {
             return Ok(Flash::error(
-                Redirect::to(
-                    uri!(details: blog = blog_name.clone(), slug = slug.clone(), responding_to = _),
-                ),
+                Redirect::to(uri!(details: blog = blog_name, slug = slug, responding_to = _)),
                 i18n!(intl.catalog, "You are not allowed to delete this article."),
             ));
         }
@@ -645,7 +643,7 @@ pub fn remote_interact_post(
         .and_then(|blog| Post::find_by_slug(&rockets.conn, &slug, blog.id))?;
     if let Some(uri) = User::fetch_remote_interact_uri(&remote.remote)
         .ok()
-        .and_then(|uri| rt_format!(uri, uri = target.ap_url).ok())
+        .map(|uri| uri.replace("{uri}", &target.ap_url))
     {
         Ok(Redirect::to(uri).into())
     } else {

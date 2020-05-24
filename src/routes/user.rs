@@ -2,7 +2,6 @@ use activitypub::{
     activity::Create,
     collection::{OrderedCollection, OrderedCollectionPage},
 };
-use atom_syndication::{Entry, FeedBuilder};
 use diesel::SaveChangesDsl;
 use rocket::{
     http::{ContentType, Cookies},
@@ -14,7 +13,9 @@ use serde_json;
 use std::{borrow::Cow, collections::HashMap};
 use validator::{Validate, ValidationError, ValidationErrors};
 
-use inbox;
+use crate::inbox;
+use crate::routes::{errors::ErrorPage, Page, RemoteForm, RespondOrRedirect};
+use crate::template_utils::{IntoContext, Ructe};
 use plume_common::activity_pub::{broadcast, inbox::FromId, ActivityStream, ApRequest, Id};
 use plume_common::utils;
 use plume_models::{
@@ -31,8 +32,6 @@ use plume_models::{
     users::*,
     Error, PlumeRocket,
 };
-use routes::{errors::ErrorPage, Page, RemoteForm, RespondOrRedirect};
-use template_utils::{IntoContext, Ructe};
 
 #[get("/me")]
 pub fn me(user: Option<User>) -> RespondOrRedirect {
@@ -202,15 +201,14 @@ pub fn follow_not_connected(
         if let Some(uri) = User::fetch_remote_interact_uri(&remote_form)
             .ok()
             .and_then(|uri| {
-                rt_format!(
-                    uri,
-                    uri = format!(
+                Some(uri.replace(
+                    "{uri}",
+                    &format!(
                         "{}@{}",
                         target.fqn,
                         target.get_instance(&rockets.conn).ok()?.public_domain
-                    )
-                )
-                .ok()
+                    ),
+                ))
             })
         {
             Ok(Redirect::to(uri).into())
@@ -355,7 +353,7 @@ pub fn edit(name: String, user: User, rockets: PlumeRocket) -> Result<Ructe, Err
             ValidationErrors::default()
         )))
     } else {
-        Err(Error::Unauthorized)?
+        Err(Error::Unauthorized.into())
     }
 }
 
@@ -399,7 +397,10 @@ pub fn update(
         )
         .0,
     );
-    user.preferred_theme = form.theme.clone();
+    user.preferred_theme = form
+        .theme
+        .clone()
+        .and_then(|t| if &t == "" { None } else { Some(t) });
     user.hide_custom_css = form.hide_custom_css;
     let _: User = user.save_changes(&*conn).map_err(Error::from)?;
 
@@ -413,7 +414,7 @@ pub fn update(
 pub fn delete(
     name: String,
     user: User,
-    mut cookies: Cookies,
+    mut cookies: Cookies<'_>,
     rockets: PlumeRocket,
 ) -> Result<Flash<Redirect>, ErrorPage> {
     let account = User::find_by_fqn(&rockets, &name)?;
@@ -484,8 +485,20 @@ pub fn validate_username(username: &str) -> Result<(), ValidationError> {
     }
 }
 
-fn to_validation(_: Error) -> ValidationErrors {
+fn to_validation(x: Error) -> ValidationErrors {
     let mut errors = ValidationErrors::new();
+    if let Error::Blocklisted(show, msg) = x {
+        if show {
+            errors.add(
+                "email",
+                ValidationError {
+                    code: Cow::from("blocklisted"),
+                    message: Some(Cow::from(msg)),
+                    params: HashMap::new(),
+                },
+            );
+        }
+    }
     errors.add(
         "",
         ValidationError {
@@ -529,8 +542,7 @@ pub fn create(
                 "",
                 form.email.to_string(),
                 User::hash_pass(&form.password).map_err(to_validation)?,
-            )
-            .map_err(to_validation)?;
+            ).map_err(to_validation)?;
             Ok(Flash::success(
                 Redirect::to(uri!(super::session::new: m = _)),
                 i18n!(
@@ -569,7 +581,7 @@ pub fn outbox_page(
 pub fn inbox(
     name: String,
     data: inbox::SignedJson<serde_json::Value>,
-    headers: Headers,
+    headers: Headers<'_>,
     rockets: PlumeRocket,
 ) -> Result<String, status::BadRequest<&'static str>> {
     User::find_by_fqn(&rockets, &name).map_err(|_| status::BadRequest(Some("User not found")))?;
@@ -605,20 +617,13 @@ pub fn ap_followers(
 pub fn atom_feed(name: String, rockets: PlumeRocket) -> Option<Content<String>> {
     let conn = &*rockets.conn;
     let author = User::find_by_fqn(&rockets, &name).ok()?;
-    let feed = FeedBuilder::default()
-        .title(author.display_name.clone())
-        .id(Instance::get_local()
-            .unwrap()
-            .compute_box("@", &name, "atom.xml"))
-        .entries(
-            Post::get_recents_for_author(conn, &author, 15)
-                .ok()?
-                .into_iter()
-                .map(|p| super::post_to_atom(p, conn))
-                .collect::<Vec<Entry>>(),
-        )
-        .build()
-        .expect("user::atom_feed: Error building Atom feed");
+    let entries = Post::get_recents_for_author(conn, &author, 15).ok()?;
+    let uri = Instance::get_local()
+        .ok()?
+        .compute_box("@", &name, "atom.xml");
+    let title = &author.display_name;
+    let default_updated = &author.creation_date;
+    let feed = super::build_atom_feed(entries, &uri, title, default_updated, conn);
     Some(Content(
         ContentType::new("application", "atom+xml"),
         feed.to_string(),

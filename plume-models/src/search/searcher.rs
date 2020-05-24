@@ -1,9 +1,11 @@
-use instance::Instance;
-use posts::Post;
-use schema::posts;
-use tags::Tag;
-use Connection;
-
+use crate::{
+    instance::Instance,
+    posts::Post,
+    schema::posts,
+    search::{query::PlumeQuery, tokenizer},
+    tags::Tag,
+    Connection, Result,
+};
 use chrono::Datelike;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use itertools::Itertools;
@@ -13,10 +15,6 @@ use tantivy::{
     IndexWriter, ReloadPolicy, Term,
 };
 use whatlang::{detect as detect_lang, Lang};
-
-use super::tokenizer;
-use search::query::PlumeQuery;
-use Result;
 
 #[derive(Debug)]
 pub enum SearcherError {
@@ -72,14 +70,16 @@ impl Searcher {
         schema_builder.build()
     }
 
-    pub fn create(path: &AsRef<Path>) -> Result<Self> {
-        let whitespace_tokenizer = tokenizer::WhitespaceTokenizer.filter(LowerCaser);
+    pub fn create(path: &dyn AsRef<Path>) -> Result<Self> {
+        let whitespace_tokenizer =
+            TextAnalyzer::from(tokenizer::WhitespaceTokenizer).filter(LowerCaser);
 
-        let content_tokenizer = SimpleTokenizer
+        let content_tokenizer = TextAnalyzer::from(SimpleTokenizer)
             .filter(RemoveLongFilter::limit(40))
             .filter(LowerCaser);
 
-        let property_tokenizer = NgramTokenizer::new(2, 8, false).filter(LowerCaser);
+        let property_tokenizer =
+            TextAnalyzer::from(NgramTokenizer::new(2, 8, false)).filter(LowerCaser);
 
         let schema = Self::schema();
 
@@ -111,16 +111,18 @@ impl Searcher {
         })
     }
 
-    pub fn open(path: &AsRef<Path>) -> Result<Self> {
-        let whitespace_tokenizer = tokenizer::WhitespaceTokenizer.filter(LowerCaser);
+    pub fn open(path: &dyn AsRef<Path>) -> Result<Self> {
+        let whitespace_tokenizer =
+            TextAnalyzer::from(tokenizer::WhitespaceTokenizer).filter(LowerCaser);
 
-        let content_tokenizer = SimpleTokenizer
+        let content_tokenizer = TextAnalyzer::from(SimpleTokenizer)
             .filter(RemoveLongFilter::limit(40))
             .filter(LowerCaser);
 
-        let property_tokenizer = NgramTokenizer::new(2, 8, false).filter(LowerCaser);
+        let property_tokenizer =
+            TextAnalyzer::from(NgramTokenizer::new(2, 8, false)).filter(LowerCaser);
 
-        let index =
+        let mut index =
             Index::open(MmapDirectory::open(path).map_err(|_| SearcherError::IndexOpeningError)?)
                 .map_err(|_| SearcherError::IndexOpeningError)?;
 
@@ -130,12 +132,27 @@ impl Searcher {
             tokenizer_manager.register("content_tokenizer", content_tokenizer);
             tokenizer_manager.register("property_tokenizer", property_tokenizer);
         } //to please the borrow checker
-        let mut writer = index
+        let writer = index
             .writer(50_000_000)
             .map_err(|_| SearcherError::WriteLockAcquisitionError)?;
-        writer
-            .garbage_collect_files()
+
+        // Since Tantivy v0.12.0, IndexWriter::garbage_collect_files() returns Future.
+        // To avoid conflict with Plume async project, we don't introduce async now.
+        // After async is introduced to Plume, we can use garbage_collect_files() again.
+        // Algorithm stolen from Tantivy's SegmentUpdater::list_files()
+        use std::collections::HashSet;
+        use std::path::PathBuf;
+        let mut files: HashSet<PathBuf> = index
+            .list_all_segment_metas()
+            .into_iter()
+            .flat_map(|segment_meta| segment_meta.list_files())
+            .collect();
+        files.insert(Path::new("meta.json").to_path_buf());
+        index
+            .directory_mut()
+            .garbage_collect(|| files)
             .map_err(|_| SearcherError::IndexEditionError)?;
+
         Ok(Self {
             writer: Mutex::new(Some(writer)),
             reader: index
@@ -175,7 +192,7 @@ impl Searcher {
             post_id => i64::from(post.id),
             author => post.get_authors(conn)?.into_iter().map(|u| u.fqn).join(" "),
             creation_date => i64::from(post.creation_date.num_days_from_ce()),
-            instance => Instance::get(conn, post.get_blog(conn)?.instance_id)?.public_domain.clone(),
+            instance => Instance::get(conn, post.get_blog(conn)?.instance_id)?.public_domain,
             tag => Tag::for_post(conn, post.id)?.into_iter().map(|t| t.tag).join(" "),
             blog_name => post.get_blog(conn)?.title,
             content => post.content.get().clone(),

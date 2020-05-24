@@ -1,43 +1,14 @@
 #![allow(clippy::too_many_arguments)]
 #![feature(decl_macro, proc_macro_hygiene, try_trait)]
 
-extern crate activitypub;
-extern crate askama_escape;
-extern crate atom_syndication;
-extern crate chrono;
-extern crate clap;
-extern crate colored;
-extern crate ctrlc;
-extern crate diesel;
-extern crate dotenv;
 #[macro_use]
 extern crate gettext_macros;
-extern crate gettext_utils;
-extern crate guid_create;
-extern crate heck;
-extern crate lettre;
-extern crate lettre_email;
-extern crate multipart;
-extern crate num_cpus;
-extern crate plume_api;
-extern crate plume_common;
-extern crate plume_models;
 #[macro_use]
 extern crate rocket;
-extern crate rocket_contrib;
-extern crate rocket_csrf;
-extern crate rocket_i18n;
-#[macro_use]
-extern crate runtime_fmt;
-extern crate scheduled_thread_pool;
-extern crate serde;
 #[macro_use]
 extern crate serde_json;
-extern crate serde_qs;
-extern crate validator;
 #[macro_use]
 extern crate validator_derive;
-extern crate webfinger;
 
 use clap::App;
 use diesel::r2d2::ConnectionManager;
@@ -82,10 +53,13 @@ fn init_pool() -> Option<DbPool> {
     }
 
     let manager = ConnectionManager::<Connection>::new(CONFIG.database_url.as_str());
-    let pool = DbPool::builder()
+    let mut builder = DbPool::builder()
         .connection_customizer(Box::new(PragmaForeignKey))
-        .build(manager)
-        .ok()?;
+        .min_idle(CONFIG.db_min_idle);
+    if let Some(max_size) = CONFIG.db_max_size {
+        builder = builder.max_size(max_size);
+    };
+    let pool = builder.build(manager).ok()?;
     Instance::cache_local(&pool.get().unwrap());
     Some(pool)
 }
@@ -198,6 +172,9 @@ Then try to restart Plume
                 routes::instance::admin_mod,
                 routes::instance::admin_instances,
                 routes::instance::admin_users,
+                routes::instance::admin_email_blocklist,
+                routes::instance::add_email_blocklist,
+                routes::instance::delete_email_blocklist,
                 routes::instance::edit_users,
                 routes::instance::toggle_block,
                 routes::instance::update_settings,
@@ -304,21 +281,13 @@ Then try to restart Plume
                     rocket::http::Method::Post,
                 )
                 .add_exceptions(vec![
-                    (
-                        "/inbox".to_owned(),
-                        "/inbox".to_owned(),
-                        rocket::http::Method::Post,
-                    ),
+                    ("/inbox".to_owned(), "/inbox".to_owned(), None),
                     (
                         "/@/<name>/inbox".to_owned(),
                         "/@/<name>/inbox".to_owned(),
-                        rocket::http::Method::Post,
+                        None,
                     ),
-                    (
-                        "/api/<path..>".to_owned(),
-                        "/api/<path..>".to_owned(),
-                        rocket::http::Method::Post,
-                    ),
+                    ("/api/<path..>".to_owned(), "/api/<path..>".to_owned(), None),
                 ])
                 .finalize()
                 .expect("main: csrf fairing creation error"),

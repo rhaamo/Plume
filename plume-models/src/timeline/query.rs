@@ -1,14 +1,14 @@
-use blogs::Blog;
-use lists::{self, ListType};
+use crate::{
+    blogs::Blog,
+    lists::{self, ListType},
+    posts::Post,
+    tags::Tag,
+    timeline::Timeline,
+    users::User,
+    PlumeRocket, Result,
+};
 use plume_common::activity_pub::inbox::AsActor;
-use posts::Post;
-use tags::Tag;
-use users::User;
 use whatlang::{self, Lang};
-
-use {PlumeRocket, Result};
-
-use super::Timeline;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryError {
@@ -65,7 +65,7 @@ impl<'a> Token<'a> {
         }
     }
 
-    fn get_error<T>(&self, token: Token) -> QueryResult<T> {
+    fn get_error<T>(&self, token: Token<'_>) -> QueryResult<T> {
         let (b, e) = self.get_pos();
         let message = format!(
             "Syntax Error: Expected {}, got {}",
@@ -79,7 +79,7 @@ impl<'a> Token<'a> {
 impl<'a> ToString for Token<'a> {
     fn to_string(&self) -> String {
         if let Token::Word(0, 0, v) = self {
-            return v.to_string();
+            return (*v).to_string();
         }
         format!(
             "'{}'",
@@ -127,7 +127,7 @@ macro_rules! gen_tokenizer {
     }
 }
 
-fn lex(stream: &str) -> Vec<Token> {
+fn lex(stream: &str) -> Vec<Token<'_>> {
     stream
         .chars()
         .chain(" ".chars()) // force a last whitespace to empty scan's state
@@ -163,7 +163,7 @@ impl<'a> TQ<'a> {
         rocket: &PlumeRocket,
         timeline: &Timeline,
         post: &Post,
-        kind: Kind,
+        kind: Kind<'_>,
     ) -> Result<bool> {
         match self {
             TQ::Or(inner) => inner.iter().try_fold(false, |s, e| {
@@ -181,7 +181,7 @@ impl<'a> TQ<'a> {
             TQ::Or(inner) => inner.iter().flat_map(TQ::list_used_lists).collect(),
             TQ::And(inner) => inner.iter().flat_map(TQ::list_used_lists).collect(),
             TQ::Arg(Arg::In(typ, List::List(name)), _) => vec![(
-                name.to_string(),
+                (*name).to_string(),
                 match typ {
                     WithList::Blog => ListType::Blog,
                     WithList::Author { .. } => ListType::User,
@@ -208,7 +208,7 @@ impl<'a> Arg<'a> {
         rocket: &PlumeRocket,
         timeline: &Timeline,
         post: &Post,
-        kind: Kind,
+        kind: Kind<'_>,
     ) -> Result<bool> {
         match self {
             Arg::In(t, l) => t.matches(rocket, timeline, post, l, kind),
@@ -233,8 +233,8 @@ impl WithList {
         rocket: &PlumeRocket,
         timeline: &Timeline,
         post: &Post,
-        list: &List,
-        kind: Kind,
+        list: &List<'_>,
+        kind: Kind<'_>,
     ) -> Result<bool> {
         match list {
             List::List(name) => {
@@ -290,7 +290,8 @@ impl WithList {
                     (_, _) => Err(QueryError::RuntimeError(format!(
                         "The list '{}' is of the wrong type for this usage",
                         name
-                    )))?,
+                    ))
+                    .into()),
                 }
             }
             List::Array(list) => match self {
@@ -373,7 +374,7 @@ impl Bool {
         rocket: &PlumeRocket,
         timeline: &Timeline,
         post: &Post,
-        kind: Kind,
+        kind: Kind<'_>,
     ) -> Result<bool> {
         match self {
             Bool::Followed { boosts, likes } => {
@@ -644,7 +645,7 @@ impl<'a> TimelineQuery<'a> {
         rocket: &PlumeRocket,
         timeline: &Timeline,
         post: &Post,
-        kind: Kind,
+        kind: Kind<'_>,
     ) -> Result<bool> {
         self.0.matches(rocket, timeline, post, kind)
     }
@@ -811,9 +812,17 @@ mod tests {
         );
 
         let expect_keyword = TimelineQuery::parse(r#"not_a_field contains something"#).unwrap_err();
-        assert_eq!(expect_keyword, QueryError::SyntaxError(0, 11, "Syntax Error: Expected one of 'blog', \
+        assert_eq!(
+            expect_keyword,
+            QueryError::SyntaxError(
+                0,
+                11,
+                "Syntax Error: Expected one of 'blog', \
 'author', 'license', 'tags', 'lang', 'title', 'subtitle', 'content', 'followed', 'has_cover', \
-'local' or 'all', got 'not_a_field'".to_owned()));
+'local' or 'all', got 'not_a_field'"
+                    .to_owned()
+            )
+        );
 
         let expect_bracket_or_comma = TimelineQuery::parse(r#"lang in [en ["#).unwrap_err();
         assert_eq!(

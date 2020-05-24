@@ -1,9 +1,9 @@
 @use plume_models::instance::Instance;
 @use validator::ValidationErrors;
-@use templates::base;
-@use template_utils::*;
-@use routes::instance::InstanceSettingsForm;
-@use routes::*;
+@use crate::templates::base;
+@use crate::template_utils::*;
+@use crate::routes::instance::InstanceSettingsForm;
+@use crate::routes::*;
 
 @(ctx: BaseContext, instance: Instance, form: InstanceSettingsForm, errors: ValidationErrors)
 
@@ -14,6 +14,7 @@
     (&uri!(instance::admin).to_string(), i18n!(ctx.1, "Configuration"), true),
     (&uri!(instance::admin_instances: page = _).to_string(), i18n!(ctx.1, "Instances"), false),
     (&uri!(instance::admin_users: page = _).to_string(), i18n!(ctx.1, "Users"), false),
+    (&uri!(instance::admin_email_blocklist: page=_).to_string(), i18n!(ctx.1, "Email blocklist"), false)
   ])
 
   <form method="post" action="@uri!(instance::update_settings)">
